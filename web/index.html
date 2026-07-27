@@ -258,6 +258,29 @@
   .pane{display:none}
   .pane.on{display:block;animation:fadein .28s ease}
   @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ── readiness door ── */
+  .rdverdict{border-radius:16px;padding:22px 26px;margin-bottom:18px;border:1px solid var(--line);
+    background:linear-gradient(135deg,var(--bg1),var(--bg2));display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .rdverdict .stamp{font-size:18px;font-weight:800;letter-spacing:.1em}
+  .rdverdict.go .stamp{color:var(--green)} .rdverdict.paper .stamp{color:var(--amber)} .rdverdict.wait .stamp{color:var(--dim)}
+  .rdverdict.go{border-color:rgba(52,211,153,.5)} .rdverdict.paper{border-color:rgba(251,191,36,.5)}
+  .rdverdict .why{font-size:12px;color:var(--dim);line-height:1.7;flex:1;min-width:260px}
+  .rdverdict .why b{color:var(--txt)}
+  .rdgo{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 9px;border-radius:7px;letter-spacing:.08em;white-space:nowrap}
+  .rdgo.go{color:var(--green);border:1px solid rgba(52,211,153,.5)}
+  .rdgo.paper{color:var(--amber);border:1px solid rgba(251,191,36,.5)}
+  .rdgo.wait{color:var(--dim);border:1px solid var(--line)}
+  .setupgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:12px}
+  .setup{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:rgba(12,20,34,.5)}
+  .setup .hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .setup .sym2{font-weight:800;letter-spacing:.06em}
+  .setup .ladder2{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-family:var(--mono);font-size:10px}
+  .setup .rung2{border:1px solid var(--line);border-radius:8px;padding:7px 8px}
+  .setup .rung2 .k{color:var(--faint);letter-spacing:.1em;font-size:9px}
+  .setup .rung2 .v{color:var(--txt);font-weight:700;margin-top:3px}
+  .setup .rung2.sl .v{color:var(--red)} .setup .rung2.tp .v{color:var(--green)} .setup .rung2.en .v{color:var(--cyan)}
+  .setup .dist{font-size:10px;color:var(--dim);margin-top:9px;font-family:var(--mono);line-height:1.7}
 </style>
 </head>
 <body>
@@ -270,6 +293,7 @@
   <nav class="tabs">
     <div class="tabrow">
       <button class="tab on" data-t="gate" onclick="switchTab('gate')">GATE</button>
+      <button class="tab" data-t="ready" onclick="switchTab('ready')">READY?</button>
       <button class="tab" data-t="walls" onclick="switchTab('walls')">WALLS</button>
       <button class="tab" data-t="ticket" onclick="switchTab('ticket')">TICKET</button>
       <button class="tab" data-t="levels" onclick="switchTab('levels')">LEVELS</button>
@@ -320,6 +344,28 @@
           A fire means: short perp + hedge, collect funding, exit on flip or day 5. Paper accounting until Stage 2.
         </div>
       </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="pane" id="pane-ready">
+  <div class="rdverdict wait" id="rdVerdict">
+    <div class="stamp" id="rdStamp">SCANNING…</div>
+    <div class="why" id="rdWhy">checking execution windows…</div>
+  </div>
+  <div class="card">
+    <h3>readiness board — every signal, its gate, its verdict <span class="unval">HONEST LABELS · NO LIVE ORDERS</span></h3>
+    <table>
+      <thead><tr><th>SIGNAL</th><th>NOW</th><th>GATE TO GO LIVE</th><th>VERDICT</th></tr></thead>
+      <tbody id="rdBoard"><tr><td colspan="4" class="empty">loading…</td></tr></tbody>
+    </table>
+    <h3 style="margin-top:22px">live setups — entry · SL · TP ladder <span class="unval">HYPOTHESES · SIZE VIA TICKET · ≤1% RISK</span></h3>
+    <div class="setupgrid" id="rdSetups"><div class="empty">no active setups</div></div>
+    <div class="wnote" style="margin-top:14px">
+      <b style="color:var(--amber)">What "tradable" means here.</b> A setup below is actionable only inside a kill zone,
+      only sized through the pre-flight ticket (stop first, ≤1% risk, friction &lt;25% of stop distance), and every fill
+      goes to the journal as evidence. Level calls are <b>unvalidated hypotheses</b> being scored; funding fires are
+      <b>paper accounting</b> until Stage 2. When nothing clears, STAND DOWN is the position — silence is the honest output.
     </div>
   </div>
   </div>
@@ -1005,12 +1051,13 @@ function renderJournal(){
 }
 
 /* ── tab shell ── */
-const TABS = ['gate','walls','ticket','levels','fable5'];
+const TABS = ['gate','ready','walls','ticket','levels','fable5'];
 function switchTab(name){
   if(!TABS.includes(name)) name = 'gate';
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + name));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.t === name));
   try{ localStorage.setItem('carry1_tab', name); history.replaceState(null, '', '#' + name); }catch(e){}
+  if(name === 'ready') renderReadiness();
 }
 function updateChips(){
   const hot = document.getElementById('gate').classList.contains('fire');
@@ -1026,6 +1073,97 @@ function updateChips(){
     const m = rs.length % 2 ? rs[(rs.length - 1) / 2] : (rs[rs.length / 2 - 1] + rs[rs.length / 2]) / 2;
     $('#chipJ').innerHTML = 'JOURNAL <b>' + cl.length + ' closed · ' + m.toFixed(2) + 'R med</b>';
   } else $('#chipJ').innerHTML = 'JOURNAL <b>empty</b>';
+}
+
+/* ── readiness door ── */
+function rdNextZone(now){
+  const h = now.getUTCHours();
+  for(const s of [0,8,12,24]) if(h < s) return String(s % 24).padStart(2,'0') + ':00';
+  return '00:00';
+}
+async function renderReadiness(){
+  const {cur, now} = kzState();
+  const firing = document.getElementById('gate').classList.contains('fire');
+  const v = $('#rdVerdict'), st = $('#rdStamp'), why = $('#rdWhy');
+  if(firing){
+    v.className = 'rdverdict paper';
+    st.textContent = '◉ SIGNAL FIRE — PAPER ONLY';
+    why.innerHTML = `Gate firing on <b>${[...lastFires].join(', ') || '—'}</b>. The inequality cleared with 2× margin — but this track is <b>paper accounting until Stage 2</b>. Study the ticket on the GATE door; do not size it with real capital.`;
+  } else if(cur){
+    v.className = 'rdverdict go';
+    st.textContent = '◉ TRADEABLE — ' + cur[1] + ' KILL ZONE';
+    why.innerHTML = `Discretionary window open (${String(cur[0]).padStart(2,'0')}:00–${String(cur[0]+4).padStart(2,'0')}:00 UTC). You may execute <b>your own read</b> — entry, SL and TP ladder from the setups below, sized through the <b>TICKET</b> door: stop first, ≤1% risk, friction &lt;25% of stop. No systematic signal has earned the right to tell you what to trade.`;
+  } else {
+    v.className = 'rdverdict wait';
+    st.textContent = 'STAND DOWN — BETWEEN KILL ZONES';
+    why.innerHTML = `Next window <b>${rdNextZone(now)} UTC</b>. Outside kill zones volume thins and measured friction eats the trade — that is how the earlier tracks died. Standing down <b>is</b> the position.`;
+  }
+  const j = JSON.parse(localStorage.getItem(JKEY) || '[]').filter(x => x.status === 'CLOSED' && x.rNet != null);
+  const led = lledger();
+  let fbRows = '—', fbVal = '—', fbGate = '—';
+  try{ const f = await (await fetch('fable5.json?t=' + Date.now())).json();
+    fbRows = f.history_rows; fbVal = (f.latest || {}).fusion_validity_pct ?? '—'; fbGate = (f.latest || {}).gate_decision || '—';
+  }catch(e){}
+  let wDays = '—';
+  try{ let min = null;
+    for(const s of Object.values(WPERSIST.symbols || {}))
+      for(const w of [...(s.bids || []), ...(s.asks || [])]){ const t = Date.parse(w.first_seen); if(!min || t < min) min = t; }
+    if(min) wDays = Math.max(1, Math.round((Date.now() - min) / 864e5));
+  }catch(e){}
+  const jmed = (() => { if(!j.length) return 'no closed trades';
+    const rs = j.map(x => x.rNet).sort((a,b) => a - b);
+    const m = rs.length % 2 ? rs[(rs.length-1)/2] : (rs[rs.length/2-1] + rs[rs.length/2]) / 2;
+    return j.length + ' closed · median ' + m.toFixed(2) + 'R'; })();
+  const rows = [
+    ['YOU — discretionary via ticket', cur ? ('IN ' + cur[1] + ' KZ · ' + jmed) : ('between zones · ' + jmed),
+      'stop-first · ≤1% risk · friction <25% of stop distance', 'GO', 'go'],
+    ['CARRY-1 funding fire', lastFires.size ? ('FIRING ×' + lastFires.size) : 'scanning · mostly silent',
+      'funding ≥ θ 3bp AND 5d persistence ≥ 2× measured book cost', 'PAPER', 'paper'],
+    ['liquidity walls', 'dataset day ' + wDays + ' of ~42',
+      'pre-registered backtest on recorder data → must clear cost floor with 2× margin', 'WAIT', 'wait'],
+    ['levels source grading', led.length + ' / 20 resolved',
+      '20+ resolutions → Wilson interval published either way', 'WAIT', 'wait'],
+    ['FABLE-5 fusion', 'day ' + fbRows + '/30 · validity ' + fbVal + ' · ' + fbGate,
+      '≥7 rows → calibrated, then validity ≥ 0.90 to leave PAPER_STANDBY', 'WAIT', 'wait'],
+  ];
+  $('#rdBoard').innerHTML = rows.map(r => `<tr><td style="font-weight:700">${r[0]}</td><td>${r[1]}</td>
+    <td style="color:var(--dim);font-size:11px">${r[2]}</td><td><span class="rdgo ${r[4]}">${r[3]}</span></td></tr>`).join('');
+  const cards = [];
+  for(const s of lastFires){
+    cards.push(`<div class="setup"><div class="hd"><span class="sym2">${s.replace('USDT','')}</span>
+      <span class="rdgo paper">PAPER</span><span style="font-size:9px;color:var(--faint);letter-spacing:.1em">FUNDING CARRY · SHORT PERP + HEDGE</span></div>
+      <div class="dist">full ticket on the GATE door · exit on funding flip or day 5 · no real sizing until Stage 2</div></div>`);
+  }
+  const track = ltrack();
+  const syms = [...new Set(LEVELS.map(c => c.symbol))];
+  const pxmap = {};
+  await Promise.all(syms.map(async s => { try{ pxmap[s] = +((await jget(`/premiumIndex?symbol=${s}`)).markPrice) || null; }catch(e){ pxmap[s] = null; } }));
+  for(const c of LEVELS){
+    const t = track[c.id] || {}; if(t.resolved || t.invalidated) continue;
+    if(Date.now() > Date.parse(c.expiry)) continue;
+    const E = c.trigger_long, SL = c.invalidation_px || c.support;
+    if(!E || !SL || E <= SL) continue;
+    const R = E - SL, px = pxmap[c.symbol];
+    const tp = n => fmtPx(E + n * R);
+    const dist = px ? (Math.abs((E - px) / px * 100).toFixed(2) + '% ' + (px < E ? 'below' : 'above') + ' entry') : 'price unavailable';
+    const trig = t.triggered;
+    cards.push(`<div class="setup"><div class="hd"><span class="sym2">${c.symbol.replace('USDT','')}</span>
+      <span class="rdgo ${trig ? 'paper' : 'wait'}">${trig ? '◉ TRIGGERED' : 'IN RANGE'}</span>
+      <span style="font-size:9px;color:var(--faint);letter-spacing:.1em">LONG HYPOTHESIS · ${c.source || 'levels'} · UNVALIDATED</span></div>
+      <div class="ladder2">
+        <div class="rung2 sl"><div class="k">SL / INV</div><div class="v">${fmtPx(SL)}</div></div>
+        <div class="rung2 en"><div class="k">ENTRY</div><div class="v">${fmtPx(E)}</div></div>
+        <div class="rung2 tp"><div class="k">TP1 · 1R</div><div class="v">${tp(1)}</div></div>
+        <div class="rung2 tp"><div class="k">TP2 · 2R</div><div class="v">${tp(2)}</div></div>
+      </div>
+      <div class="ladder2" style="grid-template-columns:1fr 1fr;margin-top:6px">
+        <div class="rung2 tp"><div class="k">TP3 · 3R</div><div class="v">${tp(3)}</div></div>
+        <div class="rung2"><div class="k">CONFIRM ABOVE</div><div class="v">${fmtPx(c.trigger_confirm)}</div></div>
+      </div>
+      <div class="dist">mark ${fmtPx(px)} · ${dist} · expiry ${(c.expiry || '').slice(5,16).replace('T',' ')}Z · ${cur ? 'ACTIONABLE VIA TICKET NOW' : 'WAIT FOR KILL ZONE'} · journal the outcome</div></div>`);
+  }
+  $('#rdSetups').innerHTML = cards.length ? cards.join('')
+    : '<div class="empty">no active setups — no fires, no live level calls. Standing down is a position.</div>';
 }
 
 /* ── fable5 observation strip ── */
@@ -1063,6 +1201,7 @@ async function renderFable5(){
   pfLoad(); renderJournal(); pfCalc();
   switchTab(location.hash.slice(1) || localStorage.getItem('carry1_tab') || 'gate');
   updateChips(); setInterval(updateChips, 5000);
+  renderReadiness(); setInterval(renderReadiness, 60000);
   ['pfSym','pfDir','pfEq','pfRisk','pfEntry','pfStop','pfR1','pfR2','pfR3']
     .forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', pfCalc); });
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();

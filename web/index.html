@@ -210,6 +210,35 @@
   .fb .spark{display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:14px}
   .fb .spark b{flex:1;max-width:14px;background:rgba(34,211,238,.35);border-radius:2px 2px 0 0;min-height:3px}
   .fb .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--faint)}
+
+  /* ── pre-flight ticket ── */
+  .pfgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:980px){.pfgrid{grid-template-columns:1fr}}
+  .pfrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .pfrow label{display:flex;flex-direction:column;font-size:9px;letter-spacing:.15em;color:var(--faint);gap:4px;flex:1;min-width:76px}
+  .pfrow input,.pfrow select{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);
+    font-family:var(--mono);font-size:13px;padding:8px 10px;outline:none}
+  .pfrow input:focus,.pfrow select:focus{border-color:var(--cyan)}
+  .pfbtn{background:var(--bg2);border:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11px;
+    letter-spacing:.1em;padding:9px 16px;border-radius:8px;cursor:pointer;transition:all .25s}
+  .pfbtn:hover{color:#fff;border-color:var(--cyan)}
+  .pfbtn.go{border-color:rgba(52,211,153,.4);color:var(--green)}
+  .pfbtn.go:hover{box-shadow:0 0 14px rgba(52,211,153,.2)}
+  .pfkz{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.15em;margin-left:auto;align-self:center}
+  .pfwarn{font-size:11px;color:var(--amber);min-height:16px;line-height:1.5}
+  .pfout{display:flex;gap:16px}
+  .pfladder{position:relative;width:150px;min-height:320px;border:1px solid var(--line);border-radius:10px;background:rgba(4,6,12,.5);flex-shrink:0}
+  .pfline{position:absolute;left:8px;right:8px;height:2px;border-radius:1px}
+  .pfline span{position:absolute;left:0;top:-15px;font-family:var(--mono);font-size:9px;white-space:nowrap}
+  .pfline.entry{background:#fff}
+  .pfline.stop{background:var(--red);box-shadow:0 0 10px rgba(251,77,109,.5)}
+  .pfline.tp{background:var(--green)}
+  .pfmetrics{flex:1;font-family:var(--mono);font-size:12px;min-width:0}
+  .pfmetrics .mrow{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(22,35,58,.5)}
+  .pfmetrics .mrow span:first-child{color:var(--faint);font-size:10px;letter-spacing:.1em}
+  .pfmetrics .mrow b{color:#fff;text-align:right}
+  .pfstats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .pfstats b{color:var(--amber);font-size:15px}
 </style>
 </head>
 <body>
@@ -282,6 +311,50 @@
       15m–1h horizon, which is why the server recorder is accruing a dataset toward a pre-registered backtest (~6 weeks out).
       Until that validates under the standard protocol, walls are context for your eyes and <b>never</b> enter the signal path.
       AGE = first seen by the recorder (walls.json, 5-min cadence); "new" = not yet in recorder history.
+    </div>
+  </div>
+
+  <div class="card wallcard" id="pfcard">
+    <h3>pre-flight ticket — size it with measured friction <span class="unval">DECISION SUPPORT · NO ORDER PLACEMENT</span></h3>
+    <div class="pfgrid">
+      <div class="pfinputs">
+        <div class="pfrow">
+          <label>SYMBOL<input id="pfSym" value="BTCUSDT"></label>
+          <label>SIDE<select id="pfDir"><option value="long">LONG</option><option value="short">SHORT</option></select></label>
+          <label>EQUITY $<input id="pfEq" type="number" value="10000" min="0"></label>
+          <label>RISK %<input id="pfRisk" type="number" step="0.1" value="1" min="0"></label>
+        </div>
+        <div class="pfrow">
+          <label>ENTRY<input id="pfEntry" type="number" step="any"></label>
+          <label>STOP<input id="pfStop" type="number" step="any"></label>
+          <label>TP1 (R)<input id="pfR1" type="number" step="0.1" value="1.0"></label>
+          <label>TP2 (R)<input id="pfR2" type="number" step="0.1" value="2.0"></label>
+          <label>TP3 (R)<input id="pfR3" type="number" step="0.1" value="3.0"></label>
+        </div>
+        <div class="pfrow">
+          <button class="pfbtn" onclick="pfMark()">USE MARK</button>
+          <button class="pfbtn go" onclick="pfLog()">LOG TO JOURNAL</button>
+          <span class="pfkz" id="pfKz"></span>
+        </div>
+        <div class="pfwarn" id="pfWarn"></div>
+      </div>
+      <div class="pfout">
+        <div class="pfladder" id="pfLadder"></div>
+        <div class="pfmetrics" id="pfMetrics"><div class="empty">fill entry, stop, equity, risk</div></div>
+      </div>
+    </div>
+    <h3 style="margin-top:22px">journal — your trades, scored like a source</h3>
+    <div id="pfStats"></div>
+    <table>
+      <thead><tr><th>DATE</th><th>SYM</th><th>SIDE</th><th>ENTRY</th><th>STOP</th><th>QTY</th><th>RISK$</th><th>STATUS</th><th>R NET</th><th>EXIT</th></tr></thead>
+      <tbody id="pfJournal"><tr><td colspan="10" class="empty">no trades logged — the ticket becomes data only when you log it</td></tr></tbody>
+    </table>
+    <div class="wnote">
+      <b style="color:var(--amber)">Doctrine.</b> This ticket never tells you <b>what</b> to trade — no signal has earned that.
+      It enforces <b>how</b>: fixed fractional risk, stop first, friction measured from the live book walk ($5k leg, round trip),
+      breakeven win-rates net of costs. If friction eats &gt;25% of your stop distance, the math is already against you —
+      that is how the 8 systematic tracks died. No exchange keys, no order placement: execution stays with you, and every
+      logged trade becomes evidence graded with the same median-first rules we grade the gurus.
     </div>
   </div>
 
@@ -764,6 +837,128 @@ async function wallTick(){
   await Promise.all([renderWallsDetail(), wallBoardSweep()]);
 }
 
+/* ── pre-flight ticket (decision support · no order placement) ── */
+let pfCost = {bp:null, ts:0, sym:null};
+const PFKEY = 'carry1_preflight', JKEY = 'carry1_journal';
+function pfRead(){ return {
+  sym: ($('#pfSym').value.trim().toUpperCase() || 'BTCUSDT'), dir: $('#pfDir').value,
+  eq: +$('#pfEq').value || 0, risk: +$('#pfRisk').value || 0,
+  entry: +$('#pfEntry').value || 0, stop: +$('#pfStop').value || 0,
+  r1: +$('#pfR1').value || 0, r2: +$('#pfR2').value || 0, r3: +$('#pfR3').value || 0 }; }
+function pfSave(){ try{ localStorage.setItem(PFKEY, JSON.stringify(pfRead())); }catch(e){} }
+function pfLoad(){ try{ const p = JSON.parse(localStorage.getItem(PFKEY) || '{}');
+  if(p.sym) $('#pfSym').value = p.sym; if(p.dir) $('#pfDir').value = p.dir;
+  if(p.eq) $('#pfEq').value = p.eq; if(p.risk) $('#pfRisk').value = p.risk;
+  if(p.entry) $('#pfEntry').value = p.entry; if(p.stop) $('#pfStop').value = p.stop;
+  if(p.r1) $('#pfR1').value = p.r1; if(p.r2) $('#pfR2').value = p.r2; if(p.r3) $('#pfR3').value = p.r3; }catch(e){} }
+async function pfMark(){
+  const s = pfRead();
+  try{
+    const j = await jget(`/premiumIndex?symbol=${s.sym}`);
+    $('#pfEntry').value = (+j.markPrice).toString(); pfCalc();
+  }catch(e){ $('#pfWarn').textContent = 'mark fetch failed for ' + s.sym + ' — check the symbol'; }
+}
+async function pfCostBp(sym){
+  const now = Date.now();
+  if(pfCost.sym === sym && now - pfCost.ts < 60e3) return pfCost.bp;
+  const c = await walkCost(sym);
+  pfCost = {bp: c, ts: now, sym};
+  return c;
+}
+async function pfCalc(){
+  const s = pfRead(); pfSave();
+  const {cur} = kzState();
+  $('#pfKz').textContent = cur ? ('◉ ' + cur[1] + ' KILL ZONE') : 'between kill zones';
+  const warn = $('#pfWarn'), lad = $('#pfLadder'), met = $('#pfMetrics');
+  const dist = s.dir === 'long' ? s.entry - s.stop : s.stop - s.entry;
+  if(!s.entry || !s.stop || dist <= 0 || !s.eq || !s.risk){
+    lad.innerHTML = ''; warn.textContent = '';
+    met.innerHTML = '<div class="empty">fill entry, stop, equity, risk — stop below entry for LONG, above for SHORT</div>';
+    return;
+  }
+  const riskUsd = s.eq * s.risk / 100, qty = riskUsd / dist, notional = qty * s.entry, lev = notional / s.eq;
+  const stopBp = dist / s.entry * 1e4;
+  const costBp = await pfCostBp(s.sym);
+  const costR = costBp != null ? costBp / stopBp : null;
+  const tps = [['TP1', s.r1, 'var(--cyan)'], ['TP2', s.r2, 'var(--violet)'], ['TP3', s.r3, 'var(--amber)']]
+    .filter(t => t[1] > 0)
+    .map(([t, r, c]) => {
+      const px = s.dir === 'long' ? s.entry + r * dist : s.entry - r * dist;
+      const net = costR != null ? (r - costR) : null;
+      const pbe = costR != null ? (1 + costR) / (1 + r) : null;
+      return {t, r, px, net, pbe, c};
+    });
+  const all = [s.entry, s.stop, ...tps.map(t => t.px)];
+  const lo = Math.min(...all), hi = Math.max(...all), span = (hi - lo) || 1;
+  const Y = v => 8 + (1 - (v - lo) / span) * 84;
+  lad.innerHTML =
+    tps.map(t => `<div class="pfline tp" style="top:${Y(t.px)}%"><span style="color:${t.c}">${t.t} ${fmtPx(t.px)} · ${t.r}R</span></div>`).join('') +
+    `<div class="pfline entry" style="top:${Y(s.entry)}%"><span style="color:#fff">ENTRY ${fmtPx(s.entry)}</span></div>
+     <div class="pfline stop" style="top:${Y(s.stop)}%"><span style="color:var(--red)">STOP ${fmtPx(s.stop)}</span></div>`;
+  const costTxt = costBp == null ? '— (book walk failed)' : `${costBp}bp = ${(costR * 100).toFixed(0)}% of stop`;
+  met.innerHTML =
+    `<div class="mrow"><span>RISK $</span><b>$${riskUsd.toFixed(2)} (${s.risk}% of $${s.eq.toLocaleString()})</b></div>
+     <div class="mrow"><span>SIZE</span><b>${qty >= 1 ? qty.toFixed(3) : qty.toFixed(5)} ${s.sym.replace('USDT','')} · $${(notional/1000).toFixed(2)}k notional</b></div>
+     <div class="mrow"><span>LEVERAGE IMPLIED</span><b style="color:${lev > 10 ? 'var(--red)' : (lev > 3 ? 'var(--amber)' : 'var(--green)')}">${lev.toFixed(2)}×</b></div>
+     <div class="mrow"><span>STOP DISTANCE</span><b>${stopBp.toFixed(1)}bp</b></div>
+     <div class="mrow"><span>MEASURED FRICTION RT</span><b style="color:${costR != null && costR > 0.25 ? 'var(--red)' : 'var(--violet)'}">${costTxt}</b></div>` +
+    tps.map(t => `<div class="mrow"><span style="color:${t.c}">${t.t} @ ${fmtPx(t.px)}</span>
+      <b>net ${t.net != null ? t.net.toFixed(2) + 'R' : '—'} · BE win ${t.pbe != null ? (t.pbe * 100).toFixed(0) + '%' : '—'}</b></div>`).join('');
+  warn.textContent = costR != null && costR > 0.25
+    ? '⚠ friction eats >25% of your stop distance — widen the stop or skip. This is exactly how the 8 systematic tracks died.'
+    : (lev > 10 ? '⚠ implied leverage >10× — size down or accept liquidation risk.' : '');
+}
+function pfLog(){
+  const s = pfRead();
+  const dist = s.dir === 'long' ? s.entry - s.stop : s.stop - s.entry;
+  if(!s.entry || !s.stop || dist <= 0 || !s.eq || !s.risk){
+    $('#pfWarn').textContent = 'cannot log — complete the ticket first'; return;
+  }
+  const j = JSON.parse(localStorage.getItem(JKEY) || '[]');
+  j.push({ id: Date.now(), date: new Date().toISOString().slice(0, 10), ...s,
+    qty: (s.eq * s.risk / 100) / dist, riskUsd: s.eq * s.risk / 100,
+    costR: pfCost.bp != null && pfCost.sym === s.sym ? pfCost.bp / (dist / s.entry * 1e4) : null,
+    status: 'OPEN', exit: null, rNet: null });
+  localStorage.setItem(JKEY, JSON.stringify(j.slice(-100)));
+  renderJournal();
+  $('#pfWarn').textContent = 'logged — close it from the journal when done, and it becomes evidence.';
+}
+function pfClose(id){
+  const j = JSON.parse(localStorage.getItem(JKEY) || '[]');
+  const t = j.find(x => x.id === id); if(!t) return;
+  const px = +prompt('Exit price for ' + t.sym + ':');
+  if(!px) return;
+  const dist = t.dir === 'long' ? t.entry - t.stop : t.stop - t.entry;
+  const gross = (t.dir === 'long' ? 1 : -1) * (px - t.entry) / dist;
+  t.exit = px; t.status = 'CLOSED';
+  t.rNet = Math.round((gross - (t.costR || 0)) * 100) / 100;
+  localStorage.setItem(JKEY, JSON.stringify(j)); renderJournal();
+}
+function renderJournal(){
+  const j = JSON.parse(localStorage.getItem(JKEY) || '[]');
+  const closed = j.filter(x => x.status === 'CLOSED' && x.rNet != null);
+  if(closed.length){
+    const rs = closed.map(x => x.rNet).sort((a, b) => a - b);
+    const med = rs.length % 2 ? rs[(rs.length - 1) / 2] : (rs[rs.length / 2 - 1] + rs[rs.length / 2]) / 2;
+    const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
+    const wins = rs.filter(r => r > 0).length;
+    $('#pfStats').innerHTML = `<div class="pfstats">
+      <span>closed <b>${closed.length}</b></span><span>median R <b>${med.toFixed(2)}</b></span>
+      <span>mean R <b>${mean.toFixed(2)}</b></span><span>win <b>${(wins / closed.length * 100).toFixed(0)}%</b></span>
+      <span style="color:var(--faint)">median-first · friction deducted · grading meaningful at 20+</span></div>`;
+  } else $('#pfStats').innerHTML = '';
+  $('#pfJournal').innerHTML = j.length ? j.slice().reverse().map(t => `<tr>
+      <td>${t.date}</td><td class="sym">${t.sym.replace('USDT','')}</td>
+      <td style="color:${t.dir === 'long' ? 'var(--green)' : 'var(--red)'}">${t.dir.toUpperCase()}</td>
+      <td>${fmtPx(t.entry)}</td><td>${fmtPx(t.stop)}</td>
+      <td>${t.qty >= 1 ? t.qty.toFixed(3) : t.qty.toFixed(5)}</td><td>$${t.riskUsd.toFixed(0)}</td>
+      <td style="color:${t.status === 'OPEN' ? 'var(--amber)' : 'var(--dim)'}">${t.status}</td>
+      <td style="font-weight:700;color:${t.rNet == null ? 'var(--faint)' : (t.rNet > 0 ? 'var(--green)' : 'var(--red)')}">${t.rNet == null ? '—' : (t.rNet > 0 ? '+' : '') + t.rNet + 'R'}</td>
+      <td>${t.status === 'OPEN' ? `<span class="wflag tick" style="cursor:pointer" onclick="pfClose(${t.id})">CLOSE</span>` : fmtPx(t.exit)}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="10" class="empty">no trades logged — the ticket becomes data only when you log it</td></tr>';
+}
+
 /* ── fable5 observation strip ── */
 async function renderFable5(){
   let f; try{ f = await (await fetch('fable5.json?t='+Date.now())).json(); }catch(e){ return; }
@@ -795,6 +990,9 @@ async function renderFable5(){
   loadWallsPersist(); wallTick();
   setInterval(wallTick, 12000); setInterval(loadWallsPersist, 600000);
   renderFable5(); setInterval(renderFable5, 600000);
+  pfLoad(); renderJournal(); pfCalc();
+  ['pfSym','pfDir','pfEq','pfRisk','pfEntry','pfStop','pfR1','pfR2','pfR3']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', pfCalc); });
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
 })();
 </script>

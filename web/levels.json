@@ -1,0 +1,21 @@
+{
+  "updated_at": "2026-07-27T15:20:00Z",
+  "note": "Discretionary level calls tracked as SCORED HYPOTHESES, not adopted edge. The ledger grades each source after 20+ resolved calls. Proxy caveat: PAXGUSDT perp tracks CME gold with premium/discount noise and a thinner book.",
+  "calls": [
+    {
+      "id": "sonic-wk31-gold",
+      "source": "@sonictraders WK31 (2026-07-27)",
+      "asset": "Gold futures (proxy: PAXGUSDT)",
+      "symbol": "PAXGUSDT",
+      "bias": "neutral / slightly bullish",
+      "support": 3982,
+      "trigger_long": 4100,
+      "trigger_confirm": 4120,
+      "invalidation": "weekly close below 3982",
+      "invalidation_px": 3982,
+      "catalyst": "FOMC 2026-07-29",
+      "expiry": "2026-08-02T00:00:00Z",
+      "notes": "Strong sell attempt last Thursday; momentum weak; buyers defensive. Bullishness returns only above 4100-4120. Middle East de-escalation could roar gold up; market may shift direction after 29 July."
+    }
+  ]
+}

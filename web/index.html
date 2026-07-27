@@ -126,6 +126,34 @@
   .stamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
   .stamp span{font-size:26px;font-weight:900;letter-spacing:.3em;color:rgba(91,112,137,.25);transform:rotate(-12deg);
     border:3px solid rgba(91,112,137,.25);padding:8px 26px;border-radius:12px}
+
+  /* ── levels ledger ── */
+  .lvl{margin-top:18px}
+  .lvlcard{border:1px solid var(--line);border-radius:16px;padding:20px;position:relative;overflow:hidden;
+    background:linear-gradient(150deg,#0d1420,var(--bg0));margin-bottom:14px}
+  .lvlcard .src{font-size:10px;letter-spacing:.25em;color:var(--dim);text-transform:uppercase}
+  .lvlcard .asset{font-size:19px;font-weight:800;margin-top:3px}
+  .lvlcard .bias{display:inline-block;font-size:10px;letter-spacing:.15em;padding:3px 10px;border-radius:20px;margin-left:8px;
+    background:rgba(34,211,238,.1);color:var(--cyan);border:1px solid rgba(34,211,238,.3);vertical-align:middle}
+  .lvlstate{position:absolute;top:18px;right:20px;text-align:right}
+  .lvlstate .st{font-size:11px;letter-spacing:.2em;font-weight:700;padding:4px 12px;border-radius:20px}
+  .st.range{background:var(--bg2);color:var(--dim);border:1px solid var(--line)}
+  .st.trig{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.4)}
+  .st.inv{background:rgba(251,77,109,.12);color:var(--red);border:1px solid rgba(251,77,109,.4)}
+  .lvlstate .px{font-family:var(--mono);font-size:15px;margin-top:5px;color:#fff}
+  .lvlbar{position:relative;height:34px;margin:16px 0 6px;border-radius:8px;
+    background:linear-gradient(90deg,rgba(251,77,109,.10),rgba(255,255,255,.03) 45%,rgba(52,211,153,.10))}
+  .lvlmark{position:absolute;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;
+    background:#fff;box-shadow:0 0 14px rgba(255,255,255,.7);border:2px solid var(--bg0)}
+  .lvlline{position:absolute;top:50%;transform:translate(-50%,-50%);width:2px;height:22px}
+  .lvlline.s{background:var(--red)} .lvlline.t{background:var(--green)} .lvlline.t2{background:var(--green);opacity:.55;height:16px}
+  .lvllabels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .lvllabels b{color:var(--dim)}
+  .lvlmeta{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--dim);font-family:var(--mono)}
+  .lvlmeta b{color:var(--amber)}
+  .ledger{font-family:var(--mono);font-size:11px;width:100%;border-collapse:collapse;margin-top:8px}
+  .ledger td,.ledger th{padding:6px 8px;border-bottom:1px solid rgba(22,35,58,.5);text-align:left}
+  .ledger th{color:var(--faint);font-size:9px;letter-spacing:.15em}
 </style>
 </head>
 <body>
@@ -170,6 +198,19 @@
           <b style="color:var(--green)">MARGIN</b> = persist − 2×cost. <b>Only margin ≥ 0 fires.</b><br>
           A fire means: short perp + hedge, collect funding, exit on flip or day 5. Paper accounting until Stage 2.
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lvl">
+    <div class="card" style="padding:18px 20px">
+      <h3>levels ledger — discretionary calls tracked as scored hypotheses</h3>
+      <div id="levels"><div class="empty">loading level calls…</div></div>
+      <div id="ledgerBox" style="margin-top:14px"></div>
+      <div style="font-size:10px;color:var(--faint);margin-top:12px;line-height:1.6">
+        A level call is a HYPOTHESIS, not adopted edge. Each call is tracked live (trigger / invalidation / expiry),
+        scored at resolution, and the source is graded after 20+ resolved calls — Wilson interval, published either way.
+        Proxy caveat: PAXGUSDT tracks CME gold with premium/discount noise and a thinner book.
       </div>
     </div>
   </div>
@@ -413,10 +454,100 @@ async function poll(){
   renderKZ();
 }
 
+/* ── levels ledger ───────────────────────────────────────────
+   Each call is tracked live and SCORED at resolution. Tracking
+   state (open price, window max/min) persists in localStorage;
+   resolved calls append to the local ledger. This converts
+   "trust a source" into "measure a source". */
+let LEVELS = [];
+const LKEY = 'carry1_levels_track', LLEDGER = 'carry1_levels_ledger';
+const ltrack = () => JSON.parse(localStorage.getItem(LKEY) || '{}');
+const lledger = () => JSON.parse(localStorage.getItem(LLEDGER) || '[]');
+
+async function loadLevels(){
+  try{ LEVELS = (await (await fetch('levels.json')).json()).calls || []; }catch(e){ LEVELS = []; }
+}
+
+async function evalLevels(){
+  if(!LEVELS.length){ $('#levels').innerHTML = '<div class="empty">no active level calls</div>'; return; }
+  const track = ltrack();
+  const now = Date.now();
+  let html = '';
+  for(const c of LEVELS){
+    let px = null;
+    try{ px = +((await jget(`/premiumIndex?symbol=${c.symbol}`)).markPrice) || null; }catch(e){}
+    if(px == null) continue;
+    const t = track[c.id] || (track[c.id] = {
+      open_px: px, opened_at: new Date(now).toISOString(),
+      hi: px, lo: px, triggered: false, invalidated: false, resolved: false });
+    t.hi = Math.max(t.hi, px); t.lo = Math.min(t.lo, px);
+    const expired = now > Date.parse(c.expiry);
+    if(px >= c.trigger_long) t.triggered = true;
+    if(px < c.invalidation_px) t.invalidated = true;
+
+    let st, cls;
+    if(t.resolved){ st = 'RESOLVED'; cls = 'range'; }
+    else if(t.triggered){ st = '◉ TRIGGERED LONG'; cls = 'trig'; }
+    else if(t.invalidated){ st = '✕ INVALIDATED'; cls = 'inv'; }
+    else if(expired){ st = 'EXPIRED'; cls = 'range'; }
+    else { st = 'IN RANGE'; cls = 'range'; }
+
+    // resolve once: at expiry, or when invalidated, record the outcome
+    if(!t.resolved && (expired || t.invalidated || (t.triggered && px >= c.trigger_confirm))){
+      t.resolved = true; t.resolved_at = new Date(now).toISOString();
+      const outcome = t.triggered ? 'TRIGGER_HIT' : (t.invalidated ? 'INVALIDATED_FIRST' : 'EXPIRED_UNTOUCHED');
+      const mfe = Math.round((t.hi / t.open_px - 1) * 1e4);
+      const mae = Math.round((t.lo / t.open_px - 1) * 1e4);
+      const led = lledger();
+      led.push({ id: c.id, source: c.source, opened_at: t.opened_at, open_px: t.open_px,
+        resolved_at: t.resolved_at, outcome, mfe_bp: mfe, mae_bp: mae,
+        close_px: px, ret_bp: Math.round((px / t.open_px - 1) * 1e4) });
+      localStorage.setItem(LLEDGER, JSON.stringify(led.slice(-200)));
+    }
+
+    const lo = Math.min(c.support, px, t.lo) * 0.998, hi = Math.max(c.trigger_confirm, px, t.hi) * 1.002;
+    const P = v => Math.max(2, Math.min(98, (v - lo) / (hi - lo) * 100));
+    const dTrig = ((c.trigger_long / px - 1) * 100).toFixed(2);
+    const dSup = ((px / c.support - 1) * 100).toFixed(2);
+    html += `<div class="lvlcard">
+      <div class="src">${c.source} · catalyst: <b style="color:var(--amber)">${c.catalyst}</b> · expiry ${c.expiry.slice(0,10)}</div>
+      <div class="asset">${c.asset}<span class="bias">${c.bias}</span></div>
+      <div class="lvlstate"><span class="st ${cls}">${st}</span><div class="px">${fmtPx(px)}</div></div>
+      <div class="lvlbar">
+        <div class="lvlline s" style="left:${P(c.support)}%"></div>
+        <div class="lvlline t" style="left:${P(c.trigger_long)}%"></div>
+        <div class="lvlline t2" style="left:${P(c.trigger_confirm)}%"></div>
+        <div class="lvlmark" style="left:${P(px)}%"></div>
+      </div>
+      <div class="lvllabels"><span>SL/inv <b>${c.support}</b> (−${dSup}%)</span>
+        <span>TRIGGER <b>${c.trigger_long}</b> (+${dTrig}%) → confirm <b>${c.trigger_confirm}</b></span></div>
+      <div class="lvlmeta">
+        <span>open <b>${fmtPx(t.open_px)}</b></span>
+        <span>window hi <b>${fmtPx(t.hi)}</b> lo <b>${fmtPx(t.lo)}</b></span>
+        <span>MFE <b>${Math.round((t.hi/t.open_px-1)*1e4)}bp</b> MAE <b>${Math.round((t.lo/t.open_px-1)*1e4)}bp</b></span>
+      </div>
+      <div style="font-size:11px;color:var(--faint);margin-top:10px">${c.notes}</div>
+    </div>`;
+  }
+  localStorage.setItem(LKEY, JSON.stringify(track));
+  $('#levels').innerHTML = html;
+
+  const led = lledger();
+  if(led.length){
+    const wins = led.filter(x=>x.outcome==='TRIGGER_HIT').length;
+    $('#ledgerBox').innerHTML = `<div style="font-size:10px;letter-spacing:.25em;color:var(--faint);margin-bottom:6px">
+      RESOLVED CALLS — source score: ${wins}/${led.length} triggers hit (grading starts at 20)</div>
+      <table class="ledger"><tr><th>CALL</th><th>SOURCE</th><th>OPEN</th><th>OUTCOME</th><th>MFE bp</th><th>MAE bp</th><th>RET bp</th></tr>
+      ${led.slice().reverse().map(x=>`<tr><td>${x.id}</td><td>${x.source.split(' ')[0]}</td><td>${fmtPx(x.open_px)}</td>
+        <td style="color:${x.outcome==='TRIGGER_HIT'?'var(--green)':(x.outcome==='INVALIDATED_FIRST'?'var(--red)':'var(--dim)')}">${x.outcome}</td>
+        <td>${x.mfe_bp}</td><td>${x.mae_bp}</td><td>${x.ret_bp}</td></tr>`).join('')}</table>`;
+  }
+}
+
 (async () => {
   try{ PERSIST = (await (await fetch('persist.json')).json()).names || {}; }catch(e){}
-  await discoverUniverse();
-  renderAlerts();
+  await Promise.all([discoverUniverse(), loadLevels()]);
+  renderAlerts(); evalLevels(); setInterval(evalLevels, 60000);
   poll(); setInterval(poll, 30000);
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
 })();

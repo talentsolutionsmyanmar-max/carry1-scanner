@@ -1,0 +1,50 @@
+{
+ "generated_at": "2026-07-27T15:12:04.772972+00:00",
+ "note": "median/p75 gross carry (bp) per theta from each name own funding history; epoch_h = funding interval hours. Fail-closed: names absent here cannot fire.",
+ "names": {
+  "AKEUSDT": {
+   "epoch_h": 4.0,
+   "2.0": {
+    "n": 16,
+    "median_gross_bp": 41.587199999999996,
+    "p75_gross_bp": 66.5593
+   },
+   "3.0": {
+    "n": 14,
+    "median_gross_bp": 49.416799999999995,
+    "p75_gross_bp": 66.5593
+   },
+   "5.0": {
+    "n": 9,
+    "median_gross_bp": 40.9943,
+    "p75_gross_bp": 102.11970000000001
+   }
+  },
+  "DEXEUSDT": {
+   "epoch_h": 4.0,
+   "2.0": {
+    "n": 6,
+    "median_gross_bp": 47.8624,
+    "p75_gross_bp": 60.91760000000001
+   }
+  },
+  "BTWUSDT": {
+   "epoch_h": 4.0,
+   "2.0": {
+    "n": 10,
+    "median_gross_bp": 74.86430000000001,
+    "p75_gross_bp": 92.66809999999998
+   },
+   "3.0": {
+    "n": 10,
+    "median_gross_bp": 73.20560000000003,
+    "p75_gross_bp": 87.40190000000001
+   },
+   "5.0": {
+    "n": 9,
+    "median_gross_bp": 56.2344,
+    "p75_gross_bp": 84.294
+   }
+  }
+ }
+}

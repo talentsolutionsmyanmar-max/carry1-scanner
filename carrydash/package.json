@@ -1,0 +1,9 @@
+{
+  "name": "carry1-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CARRY-1 honest signal scanner — funding-carry gate + day-trading context panel",
+  "scripts": {
+    "dev": "python3 server.py"
+  }
+}

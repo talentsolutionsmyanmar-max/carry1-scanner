@@ -1,0 +1,97 @@
+{
+  "universe": [
+    "ETHUSDT",
+    "BTCUSDT",
+    "BANKUSDT",
+    "SOLUSDT",
+    "AKEUSDT",
+    "EULUSDT",
+    "ESPUSDT",
+    "ZECUSDT",
+    "DEXEUSDT",
+    "XRPUSDT",
+    "HYPEUSDT",
+    "1000SHIBUSDT",
+    "DOGEUSDT",
+    "1000PEPEUSDT",
+    "DIAUSDT",
+    "BNBUSDT",
+    "PUMPUSDT",
+    "KAITOUSDT",
+    "ESPORTSUSDT",
+    "WLDUSDT"
+  ],
+  "months": 5.464301357862462,
+  "results": {
+    "theta_1": {
+      "theta_bp": 1,
+      "trades": 302,
+      "trades_per_month": 55.3,
+      "median_epochs": 2.0,
+      "median_gross_bp": 1.58,
+      "mean_gross_bp": 10.97,
+      "p75_gross_bp": 4.21,
+      "venues": {
+        "binance": {
+          "median_net_bp": -20.42,
+          "pct_positive": 9.3,
+          "gate_2x": "fail"
+        },
+        "mexc": {
+          "median_net_bp": -8.42,
+          "pct_positive": 13.6,
+          "gate_2x": "fail"
+        }
+      }
+    },
+    "theta_2": {
+      "theta_bp": 2,
+      "trades": 38,
+      "trades_per_month": 7.0,
+      "median_epochs": 29.0,
+      "median_gross_bp": 41.65,
+      "mean_gross_bp": 71.15,
+      "p75_gross_bp": 72.85,
+      "venues": {
+        "binance": {
+          "median_net_bp": 19.65,
+          "pct_positive": 73.7,
+          "gate_2x": "fail"
+        },
+        "mexc": {
+          "median_net_bp": 31.65,
+          "pct_positive": 84.2,
+          "gate_2x": "PASS"
+        }
+      }
+    },
+    "theta_3": {
+      "theta_bp": 3,
+      "trades": 29,
+      "trades_per_month": 5.3,
+      "median_epochs": 29.0,
+      "median_gross_bp": 55.75,
+      "mean_gross_bp": 87.6,
+      "p75_gross_bp": 90.28,
+      "venues": {
+        "binance": {
+          "median_net_bp": 33.75,
+          "pct_positive": 86.2,
+          "gate_2x": "fail"
+        },
+        "mexc": {
+          "median_net_bp": 45.75,
+          "pct_positive": 89.7,
+          "gate_2x": "PASS"
+        }
+      }
+    }
+  },
+  "unconditional": {
+    "mean": -0.68423144,
+    "median": 0.5,
+    "p75": 0.5,
+    "p90": 1.0,
+    "pct_pos": 68.63
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "costs_bp": {
+    "ETHUSDT": 0.20436576362526276,
+    "BTCUSDT": 0.0613339364539452,
+    "BANKUSDT": 27.05215754303098,
+    "SOLUSDT": 5.220228384987095,
+    "AKEUSDT": 38.949050661172876,
+    "EULUSDT": 24.079132981916665,
+    "ZECUSDT": 4.291868442127892,
+    "ESPUSDT": 32.523875944822045,
+    "DEXEUSDT": 35.43330964022995,
+    "XRPUSDT": 3.625651484250677,
+    "HYPEUSDT": 1.4675472563620375,
+    "1000SHIBUSDT": 13.242072718369592,
+    "DOGEUSDT": 5.529062132833575,
+    "1000PEPEUSDT": 5.965271855427084,
+    "DIAUSDT": 48.988180914392345,
+    "BNBUSDT": 0.6976480539973248,
+    "PUMPUSDT": 27.641602382614685,
+    "KAITOUSDT": 22.21046504915776,
+    "ESPORTSUSDT": 57.70897805067783,
+    "WLDUSDT": 14.68174882908929
+  },
+  "span_days": {
+    "ETHUSDT": 166,
+    "BTCUSDT": 166,
+    "BANKUSDT": 83,
+    "SOLUSDT": 166,
+    "AKEUSDT": 83,
+    "EULUSDT": 83,
+    "ZECUSDT": 166,
+    "ESPUSDT": 83,
+    "DEXEUSDT": 64,
+    "XRPUSDT": 166,
+    "HYPEUSDT": 83,
+    "1000SHIBUSDT": 166,
+    "DOGEUSDT": 166,
+    "1000PEPEUSDT": 166,
+    "DIAUSDT": 83,
+    "BNBUSDT": 166,
+    "PUMPUSDT": 83,
+    "KAITOUSDT": 83,
+    "ESPORTSUSDT": 37,
+    "WLDUSDT": 166
+  },
+  "theta": {
+    "2": {
+      "n": 38,
+      "trades_per_month": 15.0,
+      "median_gross_bp": 41.65,
+      "median_cost_bp": 38.95,
+      "median_net_bp": 4.19,
+      "median_2x_cost_bp": 77.9,
+      "clears_2x_median": false,
+      "pct_net_positive": 55.3,
+      "top_symbol_share": 0.42,
+      "concentration_ok": true,
+      "per_year": {
+        "n": {
+          "2026": 38
+        },
+        "med_net": {
+          "2026": 4.19
+        },
+        "pct_pos": {
+          "2026": 55.26
+        }
+      },
+      "sign_stable_years": false,
+      "PASS": false
+    },
+    "3": {
+      "n": 29,
+      "trades_per_month": 11.5,
+      "median_gross_bp": 55.75,
+      "median_cost_bp": 38.95,
+      "median_net_bp": 16.8,
+      "median_2x_cost_bp": 77.9,
+      "clears_2x_median": false,
+      "pct_net_positive": 65.5,
+      "top_symbol_share": 0.48,
+      "concentration_ok": true,
+      "per_year": {
+        "n": {
+          "2026": 29
+        },
+        "med_net": {
+          "2026": 16.8
+        },
+        "pct_pos": {
+          "2026": 65.52
+        }
+      },
+      "sign_stable_years": false,
+      "PASS": false
+    }
+  }
+}

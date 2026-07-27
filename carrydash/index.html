@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CARRY-1 · Honest Signal Scanner</title>
+<style>
+  :root{
+    --bg0:#04060c; --bg1:#080d17; --bg2:#0c1422; --line:#16233a;
+    --txt:#dbe7f5; --dim:#5b7089; --faint:#33465e;
+    --cyan:#22d3ee; --violet:#8b5cf6; --amber:#fbbf24; --red:#fb4d6d; --green:#34d399;
+    --mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(139,92,246,.09), transparent 60%),
+      radial-gradient(1000px 600px at 10% 110%, rgba(34,211,238,.07), transparent 60%),
+      var(--bg0);
+    color:var(--txt); font:14px/1.5 -apple-system,'SF Pro',Inter,system-ui,sans-serif;
+    min-height:100vh; padding:22px clamp(14px,3vw,40px) 60px;
+  }
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(34,211,238,.025) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(34,211,238,.025) 1px,transparent 1px);
+    background-size:44px 44px;mask-image:radial-gradient(ellipse at 50% 0%,#000 30%,transparent 75%)}
+  .wrap{max-width:1280px;margin:0 auto;position:relative}
+
+  /* ── top bar ── */
+  header{display:flex;align-items:center;gap:16px;padding:6px 2px 20px}
+  .logo{display:flex;align-items:baseline;gap:10px}
+  .logo b{font-size:20px;letter-spacing:.14em;background:linear-gradient(90deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .logo span{font-size:10px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
+  .clock{margin-left:auto;text-align:right}
+  .clock .t{font-family:var(--mono);font-size:20px;color:var(--txt)}
+  .clock .d{font-size:10px;color:var(--dim);letter-spacing:.2em}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 10px var(--green);margin-right:6px;animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+
+  /* ── hero gate banner ── */
+  .gate{position:relative;border-radius:20px;padding:34px 38px;overflow:hidden;
+    border:1px solid var(--line);background:linear-gradient(135deg,var(--bg1),var(--bg2));
+    transition:border-color .6s}
+  .gate::after{content:"";position:absolute;inset:0;pointer-events:none;transition:opacity .6s;opacity:.35;
+    background:radial-gradient(600px 200px at 20% 0%,rgba(34,211,238,.12),transparent 60%)}
+  .gate.fire{border-color:rgba(251,77,109,.6);animation:firepulse 1.6s infinite}
+  .gate.fire::after{background:radial-gradient(600px 240px at 20% 0%,rgba(251,77,109,.22),transparent 60%);opacity:1}
+  @keyframes firepulse{50%{box-shadow:0 0 60px rgba(251,77,109,.35)}}
+  .gate .k{font-size:11px;letter-spacing:.35em;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+  .gate .state{font-size:clamp(30px,4.6vw,52px);font-weight:800;letter-spacing:.02em;line-height:1.05}
+  .gate .state .no{color:var(--cyan);text-shadow:0 0 40px rgba(34,211,238,.5)}
+  .gate .state .yes{color:var(--red);text-shadow:0 0 40px rgba(251,77,109,.6)}
+  .gate .sub{margin-top:10px;color:var(--dim);max-width:760px;font-size:13px}
+  .gate .sub b{color:var(--txt)}
+  .gate .formula{margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+  .gate .formula em{color:var(--amber);font-style:normal}
+
+  /* ── kill zones ── */
+  .kzrow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0}
+  .kz{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg1);position:relative;overflow:hidden}
+  .kz .n{font-size:11px;letter-spacing:.25em;color:var(--dim)}
+  .kz .h{font-family:var(--mono);font-size:18px;margin-top:2px}
+  .kz .bar{height:4px;border-radius:2px;background:var(--bg2);margin-top:10px;overflow:hidden}
+  .kz .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--violet));transition:width .8s}
+  .kz.active{border-color:rgba(34,211,238,.5);box-shadow:0 0 30px rgba(34,211,238,.12) inset}
+  .kz.active .n{color:var(--cyan)}
+  .kz .tag{position:absolute;top:12px;right:14px;font-size:9px;letter-spacing:.2em;padding:3px 8px;border-radius:20px;
+    background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+  .kz:not(.active) .tag{background:var(--bg2);color:var(--faint);border-color:var(--line)}
+
+  /* ── board ── */
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:6px}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}.kzrow{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--bg1),var(--bg0));padding:18px}
+  .card h3{font-size:11px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase;margin-bottom:14px;
+    display:flex;align-items:center;gap:8px}
+  .card h3::after{content:"";flex:1;height:1px;background:var(--line)}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px}
+  th{font-size:9.5px;letter-spacing:.18em;color:var(--faint);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:8px;border-bottom:1px solid rgba(22,35,58,.5);text-align:right;color:var(--txt)}
+  tr:hover td{background:rgba(34,211,238,.03)}
+  .sym{font-weight:700;color:#fff}
+  .pos{color:var(--green)} .neg{color:var(--red)}
+  .hot{color:var(--amber);text-shadow:0 0 14px rgba(251,191,36,.4)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:9.5px;letter-spacing:.12em}
+  .pill.fire{background:rgba(251,77,109,.15);color:var(--red);border:1px solid rgba(251,77,109,.4)}
+  .pill.watch{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+  .pill.calm{background:var(--bg2);color:var(--faint);border:1px solid var(--line)}
+  .meter{width:90px;height:5px;border-radius:3px;background:var(--bg2);display:inline-block;vertical-align:middle;overflow:hidden}
+  .meter i{display:block;height:100%;border-radius:3px}
+
+  .side .card{margin-bottom:18px}
+  .alert{display:flex;gap:10px;padding:10px 12px;border-radius:10px;background:var(--bg2);margin-bottom:8px;font-size:12px}
+  .alert .s{font-family:var(--mono);color:var(--amber);font-weight:700}
+  .alert time{margin-left:auto;color:var(--faint);font-size:10px;font-family:var(--mono)}
+  .empty{color:var(--faint);font-size:12px;text-align:center;padding:26px 0}
+
+  footer{margin-top:26px;border-top:1px solid var(--line);padding-top:18px;color:var(--faint);font-size:11.5px;line-height:1.7}
+  footer b{color:var(--dim)}
+  footer .tracks{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  footer .track{font-family:var(--mono);font-size:10.5px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+  footer .track b{color:var(--red)}
+
+  /* ── trade tickets ── */
+  #tickets{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin:18px 0}
+  .ticket{border-radius:18px;padding:22px;position:relative;overflow:hidden;
+    border:1px solid rgba(251,77,109,.45);
+    background:linear-gradient(150deg,#170b12,#0b0710 60%,#080d17)}
+  .ticket::before{content:"";position:absolute;top:-60px;right:-60px;width:220px;height:220px;border-radius:50%;
+    background:radial-gradient(circle,rgba(251,77,109,.22),transparent 65%)}
+  .ticket.preview{border-color:var(--line);background:linear-gradient(150deg,var(--bg1),var(--bg0))}
+  .ticket.preview::before{background:radial-gradient(circle,rgba(91,112,137,.15),transparent 65%)}
+  .tk-head{display:flex;align-items:baseline;gap:10px;position:relative}
+  .tk-head .s{font-size:22px;font-weight:800;letter-spacing:.03em}
+  .tk-head .side{font-size:10px;letter-spacing:.2em;color:var(--amber);border:1px solid rgba(251,191,36,.4);
+    padding:3px 9px;border-radius:20px}
+  .tk-head .live{margin-left:auto;font-size:10px;letter-spacing:.2em;color:var(--red)}
+  .tk-head .live::before{content:"◉ ";animation:pulse 1.2s infinite}
+  .tk-entry{display:flex;gap:18px;margin:14px 0 4px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .tk-entry b{color:#fff;font-size:15px;display:block}
+  .ladder{margin-top:12px;position:relative}
+  .rung{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:9px 12px;border-radius:10px;margin-bottom:6px;
+    background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+  .rung .tag{font-size:10px;letter-spacing:.15em;font-weight:700}
+  .rung.tp1 .tag{color:var(--cyan)} .rung.tp2 .tag{color:var(--violet)} .rung.tp3 .tag{color:var(--amber)}
+  .rung.sl .tag{color:var(--red)} .rung.flat .tag{color:var(--dim)}
+  .rung .what{font-size:11.5px;color:var(--dim)}
+  .rung .val{font-family:var(--mono);font-size:13px;color:var(--txt);text-align:right}
+  .rung .val small{display:block;font-size:9.5px;color:var(--faint)}
+  .stamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .stamp span{font-size:26px;font-weight:900;letter-spacing:.3em;color:rgba(91,112,137,.25);transform:rotate(-12deg);
+    border:3px solid rgba(91,112,137,.25);padding:8px 26px;border-radius:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><b>CARRY-1</b><span>honest signal scanner · k3 doctrine</span></div>
+    <div class="clock"><div class="t" id="clock">--:--:--</div><div class="d">UTC · FUNDING EPOCHS 00 / 08 / 16</div></div>
+  </header>
+
+  <div class="gate" id="gate">
+    <div class="k">signal gate — pre-registered · fail-closed · 2× margin doctrine</div>
+    <div class="state" id="gateState"><span class="no">SCANNING…</span></div>
+    <div class="sub" id="gateSub">Connecting to scanner feed…</div>
+    <div class="formula" id="gateFormula">FIRE ⇔ funding ≥ θ 3bp <em>AND</em> persistence-median ≥ 2 × measured book cost · silence is the honest output</div>
+  </div>
+
+  <div id="tickets"></div>
+
+  <div class="kzrow" id="kzrow"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>funding board — top 20 USDT perps · live</h3>
+      <table>
+        <thead><tr>
+          <th>SYMBOL</th><th>FUNDING bp</th><th>NEXT ⌀</th><th>PERSIST bp</th><th>COST bp</th><th>MARGIN</th><th>GATE</th>
+        </tr></thead>
+        <tbody id="board"><tr><td colspan="7" class="empty">warming up — first sweep takes ~60s…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h3>gate alerts</h3>
+        <div id="alerts"><div class="empty">no fire events yet — the gate has never fired without the math clearing</div></div>
+      </div>
+      <div class="card">
+        <h3>how to read this</h3>
+        <div style="font-size:12px;color:var(--dim);line-height:1.8">
+          <b style="color:var(--amber)">FUNDING</b> — last realized print (bp/8h). Amber ≥ 3bp = theta tripped.<br>
+          <b style="color:var(--cyan)">PERSIST</b> — median 5-day gross carry at that theta from the name's own history.<br>
+          <b style="color:var(--violet)">COST</b> — live order-book walk, both legs, round trip.<br>
+          <b style="color:var(--green)">MARGIN</b> = persist − 2×cost. <b>Only margin ≥ 0 fires.</b><br>
+          A fire means: short perp + hedge, collect funding, exit on flip or day 5. Paper accounting until Stage 2.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <b>Why this board is silent so often.</b> Three systematic tracks were tested to their pre-registered gates and closed on the data:
+    time-series momentum/reversion (K3, 5m–1h), cross-sectional reversal (RV-1, 4h), funding carry (CARRY-1).
+    Result each time: real but insufficient edge — the typical trade does not clear measured friction with the required 2× margin.
+    This scanner claims no always-on edge. It fires only when the inequality clears. That is the product.
+    <div class="tracks">
+      <div class="track">K3 time-series · <b>CLOSED</b> · ratio ~3× short, invariant 15m→1h</div>
+      <div class="track">RV-1 cross-sectional · <b>CLOSED</b> · median 4.5bp vs 20bp bar</div>
+      <div class="track">CARRY-1 funding · <b>CLOSED</b> · net 16.8bp vs 77.9bp bar @ θ3</div>
+      <div class="track">rule: median, not mean · measured cost · negatives published</div>
+    </div>
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let lastFires = new Set(), alerted = false;
+
+function tick(){
+  const d = new Date();
+  $('#clock').textContent = d.toISOString().slice(11,19);
+}
+setInterval(tick, 1000); tick();
+
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    [0,180,360].forEach((d,i)=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 660 + i*220; o.type = 'sine';
+      g.gain.setValueAtTime(.001, ctx.currentTime + d/1000);
+      g.gain.exponentialRampToValueAtTime(.25, ctx.currentTime + d/1000 + .03);
+      g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + d/1000 + .35);
+      o.start(ctx.currentTime + d/1000); o.stop(ctx.currentTime + d/1000 + .4);
+    });
+  }catch(e){}
+}
+
+function renderKZ(kz){
+  const blocks = [[0,'ASIA'],[8,'LONDON'],[12,'NEW YORK']];
+  $('#kzrow').innerHTML = blocks.map(([h,n])=>{
+    const active = kz && kz.in_zone && kz.name === n;
+    const prog = active ? Math.round((kz.progress||0)*100) : 0;
+    return `<div class="kz ${active?'active':''}">
+      <div class="tag">${active ? 'IN ZONE' : (n==='OFF-ZONE'?'':'IDLE')}</div>
+      <div class="n">${n} KILL ZONE</div>
+      <div class="h">${String(h).padStart(2,'0')}:00–${String(h+4).padStart(2,'0')}:00</div>
+      <div class="bar"><i style="width:${prog}%"></i></div>
+    </div>`;
+  }).join('') + '';
+}
+
+async function poll(){
+  try{
+    const r = await fetch('/api/state'); const S = await r.json();
+    renderKZ(S.kz);
+    const names = Object.entries(S.names||{});
+    names.sort((a,b)=> (b[1].funding_bp - a[1].funding_bp));
+    const maxF = Math.max(1e-9, ...names.map(([,v])=>Math.abs(v.funding_bp)));
+
+    $('#board').innerHTML = names.map(([s,v])=>{
+      const f = v.funding_bp;
+      const fCls = f >= 3 ? 'hot' : (f > 0 ? 'pos' : 'neg');
+      const w = Math.min(100, Math.abs(f)/maxF*100);
+      const mColor = v.margin_bp == null ? 'var(--faint)' : (v.margin_bp >= 0 ? 'var(--green)' : 'var(--red)');
+      const gate = v.fire ? '<span class="pill fire">◉ FIRE</span>'
+        : (f >= 3 ? '<span class="pill watch">θ TRIPPED</span>' : '<span class="pill calm">—</span>');
+      const title = (v.gate_log||[]).join(' · ');
+      return `<tr title="${title}">
+        <td class="sym">${s.replace('USDT','')}<span style="color:var(--faint);font-size:10px">/USDT</span></td>
+        <td class="${fCls}">${f.toFixed(2)}<br><span class="meter"><i style="width:${w}%;background:${f>=3?'var(--amber)':'var(--cyan)'}"></i></span></td>
+        <td style="color:var(--dim)">${v.next_funding_in_min}m</td>
+        <td style="color:var(--cyan)">${v.persistence_median_bp ?? '—'}</td>
+        <td style="color:var(--violet)">${v.cost_bp ?? '…'}</td>
+        <td style="color:${mColor};font-weight:700">${v.margin_bp ?? '—'}</td>
+        <td>${gate}</td>
+      </tr>`;
+    }).join('');
+
+    const fires = new Set(S.fires||[]);
+    const gate = $('#gate');
+    if(fires.size){
+      gate.classList.add('fire');
+      $('#gateState').innerHTML = `<span class="yes">◉ FIRE — ${[...fires].map(s=>s.replace('USDT','')).join(', ')}</span>`;
+      const f0 = S.names[[...fires][0]];
+      $('#gateSub').innerHTML = `<b>${[...fires][0]}</b> funding ${f0.funding_bp}bp · persistence ${f0.persistence_median_bp}bp ≥ 2× cost ${f0.cost_bp}bp → margin <b>+${f0.margin_bp}bp</b>. Short perp + hedge, collect each epoch, exit on flip or day 5. <b>Paper accounting only</b> — live stays gated until Stage-2.`;
+      const isNew = [...fires].some(x=>!lastFires.has(x));
+      if(isNew){ beep();
+        if(Notification.permission==='granted') new Notification('CARRY-1 FIRE', {body:[...fires].join(', ') + ' — margin cleared with 2×'});
+        else if(Notification.permission!=='denied') Notification.requestPermission();
+      }
+    } else {
+      gate.classList.remove('fire');
+      $('#gateState').innerHTML = `<span class="no">NO TRADE — GATE CLOSED</span>`;
+      const tripped = names.filter(([,v])=>v.funding_bp>=3);
+      $('#gateSub').innerHTML = tripped.length
+        ? `<b>${tripped.length}</b> name(s) above θ — but persistence does not cover 2× measured cost. The gate protects you from the tempting ones. Hover a row for its gate log.`
+        : `No name is above θ=3bp funding right now. The scanner keeps watching — it speaks only when the math clears with margin.`;
+    }
+    lastFires = fires;
+    renderTickets(S, names);
+
+    const ra = await fetch('/api/alerts'); const A = await ra.json();
+    if(A.length){
+      $('#alerts').innerHTML = A.slice().reverse().map(a=>
+        `<div class="alert"><span class="s">${a.symbol.replace('USDT','')}</span>
+         <span>+${a.margin_bp}bp margin · fr ${a.funding_bp}bp</span>
+         <time>${a.ts.slice(5,16).replace('T',' ')}</time></div>`).join('');
+    }
+  }catch(e){ /* keep last frame */ }
+}
+function fmtPx(x){ if(x==null) return '—'; const d = x>=100?2:(x>=1?4:8); return Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtETA(iso){ if(!iso) return ''; const d=new Date(iso); return d.toISOString().slice(5,16).replace('T',' ')+'Z'; }
+function rung(cls,tag,what,val,sub){
+  return `<div class="rung ${cls}"><div class="tag">${tag}</div><div class="what">${what}</div>
+    <div class="val">${val}${sub?`<small>${sub}</small>`:''}</div></div>`;
+}
+function ticketHTML(sym, t, preview){
+  const base = sym.replace('USDT','');
+  let rows = '';
+  rows += `<div class="tk-entry">
+    <div>ENTRY<small style="display:block;font-size:9px;color:var(--faint)">mark / basis</small><b>${fmtPx(t.entry_mark)}</b></div>
+    <div>FUNDING<small style="display:block;font-size:9px;color:var(--faint)">per ${t.epoch_hours}h epoch</small><b style="color:var(--amber)">+${t.funding_per_epoch_bp}bp</b></div>
+    <div>COST<small style="display:block;font-size:9px;color:var(--faint)">measured RT</small><b style="color:var(--violet)">${t.cost_bp}bp</b></div>
+  </div><div class="ladder">`;
+  if(t.tp1) rows += rung('tp1','TP1','cost recovered — breakeven','+'+t.tp1.bp+'bp', `${t.tp1.epochs} epochs → ${fmtETA(t.tp1.eta)}`);
+  if(t.tp2) rows += rung('tp2','TP2','persistence median — measured expectation','+'+t.tp2.bp+'bp', `${t.tp2.epochs} epochs → ${fmtETA(t.tp2.eta)}`);
+  if(t.tp3) rows += rung('tp3','TP3','persistence p75 — stretch','+'+t.tp3.bp+'bp', `${t.tp3.epochs} epochs → ${fmtETA(t.tp3.eta)}`);
+  rows += rung('sl','SL1','funding flip — '+t.sl_funding_flip,'print ≤ 0bp','checked every epoch');
+  rows += rung('sl','SL2','basis stop — adverse move vs entry basis '+ (t.entry_basis_bp ?? '—') +'bp','−'+t.sl_basis_bp+'bp','= full round-trip cost');
+  rows += rung('flat','FLAT','hard time exit — no position survives the window cap','day 5', fmtETA(t.hard_flat));
+  rows += '</div>';
+  return `<div class="ticket ${preview?'preview':''}">
+    ${preview?'<div class="stamp"><span>NOT TRADEABLE</span></div>':''}
+    <div class="tk-head"><span class="s">${base}<span style="color:var(--faint);font-size:13px">/USDT</span></span>
+      <span class="side">${t.side}</span>${preview?'':'<span class="live">LIVE SIGNAL</span>'}</div>
+    ${rows}</div>`;
+}
+function renderTickets(S, names){
+  const T = S.tickets || {};
+  const fires = Object.keys(T);
+  if(fires.length){
+    $('#tickets').innerHTML = fires.map(s=>ticketHTML(s, T[s], false)).join('');
+    return;
+  }
+  // no fire: show the closest candidate as a greyed preview so the ladder is visible
+  const cand = names.find(([,v])=>v.funding_bp>0 && v.cost_bp!=null) || names[0];
+  if(!cand) { $('#tickets').innerHTML=''; return; }
+  const [sym, v] = cand;
+  const pseudo = {
+    entry_mark: v.mark, entry_basis_bp: v.basis_bp,
+    funding_per_epoch_bp: v.funding_bp, epoch_hours: 8, cost_bp: v.cost_bp ?? 0,
+    tp1: v.cost_bp!=null ? {bp:v.cost_bp, epochs:Math.max(1,Math.ceil(v.cost_bp/Math.max(.01,v.funding_bp))), eta:null} : null,
+    tp2: v.persistence_median_bp!=null ? {bp:v.persistence_median_bp, epochs:Math.max(1,Math.ceil(v.persistence_median_bp/Math.max(.01,v.funding_bp))), eta:null} : null,
+    tp3: null,
+    sl_funding_flip:'exit at first epoch printing <= 0 bp',
+    sl_basis_bp: v.cost_bp ?? 0, hard_flat:null,
+  };
+  const why = v.funding_bp < 3 ? `funding ${v.funding_bp}bp < θ 3bp` :
+    (v.margin_bp==null ? 'persistence/cost unknown → fail-closed' : `margin ${v.margin_bp}bp < 0`);
+  $('#tickets').innerHTML = `<div style="font-size:10px;letter-spacing:.25em;color:var(--faint);margin-bottom:8px">
+    CLOSEST CANDIDATE — GATE CLOSED: ${why}. This is what a ticket looks like; it becomes live only when the inequality clears.</div>`
+    + ticketHTML(sym, pseudo, true);
+}
+
+poll(); setInterval(poll, 20000);
+if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+</script>
+</body>
+</html>

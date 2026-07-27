@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.hist_cache.json
+.cost_cache.json
+alerts.jsonl
+logs/

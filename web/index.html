@@ -191,6 +191,25 @@
   .wflag.tick{border-color:rgba(251,191,36,.4);color:var(--amber)}
   .wnote{margin-top:12px;font-size:10.5px;color:var(--faint);line-height:1.7}
   .wstale{font-size:9px;color:var(--faint)}
+
+  /* ── fable5 observation strip ── */
+  .fb{margin-top:18px;border:1px solid var(--line);border-radius:16px;padding:18px 20px;
+    background:linear-gradient(150deg,#0d1420,var(--bg0));position:relative;overflow:hidden}
+  .fb::before{content:"";position:absolute;top:-50px;left:-50px;width:200px;height:200px;border-radius:50%;
+    background:radial-gradient(circle,rgba(139,92,246,.12),transparent 65%)}
+  .fb .row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;position:relative}
+  .fb .tag{font-size:10px;letter-spacing:.25em;color:var(--dim);text-transform:uppercase}
+  .fb .big{font-family:var(--mono);font-size:22px;font-weight:800;color:#fff;margin-top:2px}
+  .fb .bar{flex:1;min-width:120px;height:6px;border-radius:3px;background:var(--bg2);overflow:visible;position:relative}
+  .fb .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--violet),var(--cyan));transition:width .8s}
+  .fb .bar em{position:absolute;left:23.3%;top:-3px;bottom:-3px;width:1px;background:var(--amber);opacity:.8}
+  .fb .bar em::after{content:"7";position:absolute;top:-13px;left:-3px;font-size:8px;color:var(--amber);font-style:normal}
+  .fb .pill2{font-size:9px;letter-spacing:.15em;padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .fb .pill2.stby{background:rgba(251,191,36,.1);color:var(--amber);border-color:rgba(251,191,36,.35)}
+  .fb .pill2.syn{background:rgba(139,92,246,.1);color:var(--violet);border-color:rgba(139,92,246,.35)}
+  .fb .spark{display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:14px}
+  .fb .spark b{flex:1;max-width:14px;background:rgba(34,211,238,.35);border-radius:2px 2px 0 0;min-height:3px}
+  .fb .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -277,6 +296,21 @@
         Proxy caveat: PAXGUSDT tracks CME gold with premium/discount noise and a thinner book.
       </div>
     </div>
+  </div>
+
+  <div class="fb" id="fbstrip" style="display:none">
+    <div class="row">
+      <div>
+        <div class="tag">FABLE-5 · fusion observation · day <span id="fbday">—</span></div>
+        <div class="big"><span id="fbrows">—</span><span style="color:var(--faint);font-size:13px"> /30 rows · min 7</span></div>
+      </div>
+      <div class="bar"><i id="fbbar" style="width:0%"></i><em></em></div>
+      <span class="pill2 stby" id="fbgate">—</span>
+      <span class="pill2 syn">INPUTS SYNTHETIC</span>
+      <span class="pill2" id="fbcal">CALIBRATED —</span>
+    </div>
+    <div class="spark" id="fbspark"></div>
+    <div class="meta" id="fbmeta"></div>
   </div>
 
   <footer>
@@ -730,6 +764,29 @@ async function wallTick(){
   await Promise.all([renderWallsDetail(), wallBoardSweep()]);
 }
 
+/* ── fable5 observation strip ── */
+async function renderFable5(){
+  let f; try{ f = await (await fetch('fable5.json?t='+Date.now())).json(); }catch(e){ return; }
+  $('#fbstrip').style.display = 'block';
+  const L = f.latest || {};
+  $('#fbday').textContent = L.date || '—';
+  $('#fbrows').textContent = f.history_rows;
+  $('#fbbar').style.width = Math.min(100, f.history_rows/f.target_rows*100) + '%';
+  const g = $('#fbgate');
+  g.textContent = L.gate_decision || '—';
+  g.className = 'pill2 ' + (L.gate_decision === 'ACTIVE' ? '' : 'stby');
+  $('#fbcal').textContent = 'CALIBRATED ' + (f.calibrated ? 'TRUE' : 'FALSE');
+  $('#fbspark').innerHTML = (f.history || []).map(r => {
+    const v = r[1] == null ? 3 : Math.max(3, r[1]*26);
+    return `<b style="height:${v}px" title="${r[0]} · validity ${r[1]} · ${r[2]}"></b>`;
+  }).join('');
+  $('#fbmeta').innerHTML =
+    `<span>validity <b style="color:var(--cyan)">${L.fusion_validity_pct ?? '—'}</b> = base ${L.base_validity ?? '—'} × macro ${(L.filters||{}).macro ?? '—'} × sentiment ${(L.filters||{}).sentiment ?? '—'}</span>
+     <span>provenance <b style="color:var(--amber)">${L.provenance ?? 'paper'}</b> · PAPER_STANDBY authoritative</span>
+     <span>flip manual at ≥7 rows (target 30) · live promotion needs real FRED/on-chain ingestion</span>
+     <span>updated ${(f.generated_at||'').slice(5,19).replace('T',' ')}Z</span>`;
+}
+
 (async () => {
   try{ PERSIST = (await (await fetch('persist.json')).json()).names || {}; }catch(e){}
   await Promise.all([discoverUniverse(), loadLevels()]);
@@ -737,6 +794,7 @@ async function wallTick(){
   poll(); setInterval(poll, 30000);
   loadWallsPersist(); wallTick();
   setInterval(wallTick, 12000); setInterval(loadWallsPersist, 600000);
+  renderFable5(); setInterval(renderFable5, 600000);
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
 })();
 </script>

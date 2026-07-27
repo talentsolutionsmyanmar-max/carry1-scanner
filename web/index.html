@@ -979,6 +979,7 @@ async function renderFable5(){
     `<span>validity <b style="color:var(--cyan)">${L.fusion_validity_pct ?? '—'}</b> = base ${L.base_validity ?? '—'} × macro ${(L.filters||{}).macro ?? '—'} × sentiment ${(L.filters||{}).sentiment ?? '—'}</span>
      <span>provenance <b style="color:var(--amber)">${L.provenance ?? 'paper'}</b> · PAPER_STANDBY authoritative</span>
      <span>flip manual at ≥7 rows (target 30) · live promotion needs real FRED/on-chain ingestion</span>
+     ${f.real_ingest && f.real_ingest.fields_real != null ? `<span>real ingestion <b style="color:var(--green)">${f.real_ingest.fields_real}/${f.real_ingest.fields_total}</b> keyless fields live · recorded daily</span>` : ''}
      <span>updated ${(f.generated_at||'').slice(5,19).replace('T',' ')}Z</span>`;
 }
 

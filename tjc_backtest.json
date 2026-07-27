@@ -1,0 +1,33 @@
+{
+  "fixed_1.5R": {
+    "n": 66,
+    "hit": 0.5,
+    "mean_R": 0.027,
+    "median_R": -0.011,
+    "mean_bp": 0.37,
+    "median_bp": -3.91,
+    "t_R": 0.44,
+    "profit_factor": 1.15,
+    "maxDD_R": 4.4,
+    "exits": {
+      "EOD": 57,
+      "STOP": 5,
+      "TP": 4
+    }
+  },
+  "trail_2ATR": {
+    "n": 300,
+    "hit": 0.26,
+    "mean_R": -0.068,
+    "median_R": -0.072,
+    "mean_bp": -12.81,
+    "median_bp": -16.6,
+    "t_R": -3.29,
+    "profit_factor": 0.48,
+    "maxDD_R": 22.3,
+    "exits": {
+      "STOP": 280,
+      "EOD": 20
+    }
+  }
+}

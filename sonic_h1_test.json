@@ -1,0 +1,58 @@
+{
+  "bottom third (his VALID)": {
+    "fwd4": {
+      "n": 4105,
+      "mean": 8.88,
+      "median": 0.0,
+      "t": 2.1
+    },
+    "fwd8": {
+      "n": 4105,
+      "mean": 7.79,
+      "median": -7.0,
+      "t": 1.11
+    }
+  },
+  "middle third (his pause)": {
+    "fwd4": {
+      "n": 3727,
+      "mean": -1.24,
+      "median": -8.2,
+      "t": -0.27
+    },
+    "fwd8": {
+      "n": 3727,
+      "mean": -11.8,
+      "median": -15.63,
+      "t": -1.91
+    }
+  },
+  "top third": {
+    "fwd4": {
+      "n": 2484,
+      "mean": -5.03,
+      "median": -9.83,
+      "t": -1.05
+    },
+    "fwd8": {
+      "n": 2484,
+      "mean": -6.02,
+      "median": -12.62,
+      "t": -0.83
+    }
+  },
+  "outside range": {
+    "fwd4": {
+      "n": 8702,
+      "mean": 3.73,
+      "median": -3.32,
+      "t": 1.06
+    },
+    "fwd8": {
+      "n": 8702,
+      "mean": 3.69,
+      "median": -0.76,
+      "t": 0.74
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "updated_at": "2026-07-27",
+  "note": "Sources for the weekly level-call watch. The ledger accepts only structured calls (asset, levels, invalidation, expiry) or falsifiable public claims (tickers + deadline). Paywalled content is out of scope unless the owner pastes it in.",
+  "sources": [
+    {
+      "id": "kevinxu",
+      "kind": "x_public",
+      "url": "https://x.com/kevinxu",
+      "active": true,
+      "focus": "US equities, AI-infra macro, weekly game plan (paywalled)",
+      "track": "public falsifiable claims only (ticker list + deadline); subscriber game plan only if pasted by owner",
+      "caveat": "X public fetch is best-effort and can be blocked; calls are paywalled; no audited record"
+    },
+    {
+      "id": "cryexc_alerts",
+      "kind": "telegram_public",
+      "url": "https://t.me/s/cryexc_alerts",
+      "active": true,
+      "focus": "quant/crypto trading alerts (Jose Donato, recommended by @sonictraders)",
+      "track": "structured signals if present (entry/SL/TP with symbol)",
+      "caveat": "public preview shows ~20 recent posts"
+    },
+    {
+      "id": "sonictraders",
+      "kind": "telegram_public",
+      "url": "https://t.me/s/sonictraders",
+      "active": false,
+      "focus": "weekly gold/macro levels (WK-series), London order-flow streams",
+      "track": "WK level calls when owner requests",
+      "caveat": "demoted 2026-07-27: owner prefers other sources; his 1h candle rule measured sign-flipped on crypto"
+    }
+  ]
+}

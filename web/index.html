@@ -154,6 +154,43 @@
   .ledger{font-family:var(--mono);font-size:11px;width:100%;border-collapse:collapse;margin-top:8px}
   .ledger td,.ledger th{padding:6px 8px;border-bottom:1px solid rgba(22,35,58,.5);text-align:left}
   .ledger th{color:var(--faint);font-size:9px;letter-spacing:.15em}
+
+  /* ── liquidity walls ── */
+  .wallcard{margin-top:18px}
+  .unval{font-size:9px;letter-spacing:.15em;padding:3px 10px;border-radius:20px;background:rgba(251,191,36,.1);
+    color:var(--amber);border:1px solid rgba(251,191,36,.35);margin-left:6px;white-space:nowrap}
+  .wsel{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .chip{font-family:var(--mono);font-size:11px;padding:4px 12px;border:1px solid var(--line);border-radius:20px;
+    color:var(--dim);cursor:pointer;background:var(--bg2);transition:all .25s}
+  .chip:hover{color:var(--txt);border-color:var(--dim)}
+  .chip.on{color:#fff;border-color:var(--cyan);background:rgba(34,211,238,.08);box-shadow:0 0 14px rgba(34,211,238,.15)}
+  .wgrid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px}
+  @media(max-width:980px){.wgrid{grid-template-columns:1fr}}
+  .wlad{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(4,6,12,.5);
+    font-family:var(--mono);font-size:11px;max-height:520px;overflow-y:auto}
+  .wlad::-webkit-scrollbar{width:6px}.wlad::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+  .wrow{display:grid;grid-template-columns:86px 1fr auto;gap:10px;align-items:center;padding:2.5px 4px;border-radius:5px}
+  .wrow .p{color:var(--dim);text-align:right}
+  .wrow .b{height:9px;border-radius:3px;min-width:2px}
+  .wrow .u{color:var(--faint);text-align:right;font-size:10px;white-space:nowrap}
+  .wrow.ask .b{background:linear-gradient(90deg,rgba(251,77,109,.04),rgba(251,77,109,.55))}
+  .wrow.bid .b{background:linear-gradient(90deg,rgba(52,211,153,.04),rgba(52,211,153,.5))}
+  .wrow.wall{background:rgba(251,191,36,.06);box-shadow:inset 0 0 0 1px rgba(251,191,36,.35)}
+  .wrow.wall .p{color:var(--amber);font-weight:700}
+  .wrow.wall .u{color:var(--amber)}
+  .wmid{display:flex;align-items:baseline;gap:12px;margin:6px 0;padding:7px 4px;
+    border-top:1px dashed var(--line);border-bottom:1px dashed var(--line)}
+  .wmid .mp{color:#fff;font-weight:800;font-size:14px}
+  .wmid .ms{color:var(--faint);font-size:9.5px;letter-spacing:.15em}
+  .wtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+  .wtable td,.wtable th{padding:6px 7px;border-bottom:1px solid rgba(22,35,58,.5);text-align:right;font-size:11.5px}
+  .wtable th{font-size:9px;letter-spacing:.15em;color:var(--faint)}
+  .wtable td:first-child,.wtable th:first-child{text-align:left}
+  .wflag{font-size:8.5px;letter-spacing:.1em;padding:1px 6px;border-radius:12px;border:1px solid rgba(34,211,238,.4);
+    color:var(--cyan);margin-left:4px}
+  .wflag.tick{border-color:rgba(251,191,36,.4);color:var(--amber)}
+  .wnote{margin-top:12px;font-size:10.5px;color:var(--faint);line-height:1.7}
+  .wstale{font-size:9px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -199,6 +236,33 @@
           A fire means: short perp + hedge, collect funding, exit on flip or day 5. Paper accounting until Stage 2.
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="card wallcard">
+    <h3>liquidity walls — live order-book context <span class="unval">UNVALIDATED · NEVER TOUCHES THE GATE</span></h3>
+    <div class="wsel" id="wsel"></div>
+    <div class="wgrid">
+      <div class="wlad" id="wlad"><div class="empty">loading book…</div></div>
+      <div>
+        <table class="wtable">
+          <thead><tr><th>WALL</th><th>PRICE</th><th>$M</th><th>DIST</th><th>×ATR</th><th>AGE</th><th>NEAR</th></tr></thead>
+          <tbody id="wtab"><tr><td colspan="7" class="empty">…</td></tr></tbody>
+        </table>
+        <div class="wnote" id="wnote"></div>
+      </div>
+    </div>
+    <h3 style="margin-top:22px">wall board — largest wall each side within ±2% · all 20 names</h3>
+    <table>
+      <thead><tr><th>SYMBOL</th><th>BID WALL</th><th>@DIST</th><th>ASK WALL</th><th>@DIST</th><th>IMB ±2%</th><th>SEEN</th></tr></thead>
+      <tbody id="wboard"><tr><td colspan="7" class="empty">round-robin sweep starting…</td></tr></tbody>
+    </table>
+    <div class="wnote">
+      <b style="color:var(--amber)">Honesty layer.</b> A visible wall is not intent — crypto books are pulled and spoofed
+      constantly, and 5-minute snapshots cannot see sub-second games. What they <b>can</b> measure is persistence at our
+      15m–1h horizon, which is why the server recorder is accruing a dataset toward a pre-registered backtest (~6 weeks out).
+      Until that validates under the standard protocol, walls are context for your eyes and <b>never</b> enter the signal path.
+      AGE = first seen by the recorder (walls.json, 5-min cadence); "new" = not yet in recorder history.
     </div>
   </div>
 
@@ -424,6 +488,7 @@ async function poll(){
       gate.classList.add('fire');
       $('#gateState').innerHTML = `<span class="yes">◉ FIRE — ${[...fires].map(s=>s.replace('USDT','')).join(', ')}</span>`;
       const [s0] = [...fires]; const f0 = names[s0];
+      window._candSym = s0; window._candPx = f0.mark;
       $('#gateSub').innerHTML = `<b>${s0}</b> funding ${f0.funding_bp}bp · persistence ${f0.persistence_median_bp}bp ≥ 2× cost ${f0.cost_bp}bp → margin <b>+${f0.margin_bp}bp</b>. Short perp + hedge, collect each epoch, exit on flip or day 5. <b>Paper accounting only</b>.`;
       $('#tickets').innerHTML = [...fires].map(s=>ticketHTML(s, buildTicket(s, names[s]), false)).join('');
       const isNew = [...fires].some(x=>!lastFires.has(x));
@@ -442,6 +507,7 @@ async function poll(){
       const cand = arr.find(([,v])=>v.funding_bp>0 && v.cost_bp!=null) || arr[0];
       if(cand){
         const [sym, v] = cand;
+        window._candSym = sym; window._candPx = v.mark;
         const why = v.funding_bp < 3 ? `funding ${v.funding_bp}bp < θ 3bp` :
           (v.margin_bp==null ? 'persistence/cost unknown → fail-closed' : `margin ${v.margin_bp}bp < 0`);
         $('#tickets').innerHTML = `<div style="font-size:10px;letter-spacing:.25em;color:var(--faint);margin-bottom:8px">
@@ -544,11 +610,133 @@ async function evalLevels(){
   }
 }
 
+/* ── liquidity walls (CONTEXT · UNVALIDATED · never in the gate) ── */
+let WPERSIST = {}, wallSel = null, wallATR = new Map(), WBOARD = new Map(), wBoardIdx = 0;
+const WTOL = 8e-4;
+
+async function loadWallsPersist(){
+  try{ WPERSIST = await (await fetch('walls.json?t='+Date.now())).json(); }catch(e){ WPERSIST = {}; }
+}
+function persistAge(sym, side, price){
+  const s = WPERSIST.symbols && WPERSIST.symbols[sym]; if(!s) return null;
+  for(const w of (side==='bid' ? s.bids : s.asks) || []){
+    if(Math.abs(w.price - price)/price <= WTOL){
+      const mins = Math.max(0, (Date.now() - Date.parse(w.first_seen)) / 60000);
+      return mins >= 60 ? Math.floor(mins/60)+'h'+String(Math.floor(mins%60)).padStart(2,'0')+'m'
+                        : Math.max(1,Math.floor(mins))+'m';
+    }
+  }
+  return null;
+}
+async function getATR(sym){
+  const c = wallATR.get(sym);
+  if(c && Date.now()-c.ts < 600e3) return c.atr;
+  try{
+    const ks = await jget(`/klines?symbol=${sym}&interval=1h&limit=60`);
+    const trs = [];
+    for(let i=1;i<ks.length;i++){
+      const h=+ks[i][2], l=+ks[i][3], pc=+ks[i-1][4];
+      trs.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)));
+    }
+    const atr = trs.length>=14 ? trs.slice(-14).reduce((a,b)=>a+b)/14 : null;
+    wallATR.set(sym, {atr, ts:Date.now()}); return atr;
+  }catch(e){ return null; }
+}
+function wallChips(){
+  const set = [];
+  const add = s => { if(s && !set.includes(s) && set.length < 10) set.push(s); };
+  universe.slice(0,7).forEach(add);
+  LEVELS.forEach(c => add(c.symbol));
+  if(window._candSym) add(window._candSym);
+  if(!wallSel || !set.includes(wallSel)) wallSel = set[0] || 'BTCUSDT';
+  $('#wsel').innerHTML = set.map(s =>
+    `<span class="chip ${s===wallSel?'on':''}" onclick="wallSel='${s}';wallTick()">${s.replace('USDT','')}</span>`).join('');
+}
+async function renderWallsDetail(){
+  const sym = wallSel; if(!sym) return;
+  let d;
+  try{ d = await jget(`/depth?symbol=${sym}&limit=500`); }
+  catch(e){ $('#wlad').innerHTML = '<div class="empty">depth fetch failed — Binance unreachable from this browser</div>'; return; }
+  const bids = d.bids.map(x=>[+x[0],+x[1]]), asks = d.asks.map(x=>[+x[0],+x[1]]);
+  if(!bids.length || !asks.length) return;
+  const mid = (bids[0][0]+asks[0][0])/2, atr = await getATR(sym);
+  const inR = (p,side) => side==='bid' ? (mid-p)/mid : (p-mid)/mid;
+  const B = bids.filter(([p])=>inR(p,'bid')<=0.02).map(([p,q])=>({p,q,u:p*q,side:'bid'}));
+  const A = asks.filter(([p])=>inR(p,'ask')<=0.02).map(([p,q])=>({p,q,u:p*q,side:'ask'}));
+  const bw = [...B].sort((a,b)=>b.u-a.u).slice(0,5), aw = [...A].sort((a,b)=>b.u-a.u).slice(0,5);
+  const wallSet = new Set([...bw,...aw].map(w=>w.side+w.p));
+  const maxU = Math.max(1e-9, ...B.slice(0,40).map(w=>w.u), ...A.slice(0,40).map(w=>w.u));
+  const nearLevels = LEVELS.filter(c=>c.symbol===sym)
+    .flatMap(c=>[['LVL',c.support],['TRIG',c.trigger_long],['CONF',c.trigger_confirm]]).filter(x=>x[1]);
+  const flagFor = p => {
+    for(const [t,l] of nearLevels) if(Math.abs(p-l)/l <= 0.003) return `<span class="wflag">${t}</span>`;
+    if(window._candSym===sym && window._candPx && Math.abs(p-window._candPx)/window._candPx <= 0.003)
+      return `<span class="wflag tick">TICKET</span>`;
+    return '';
+  };
+  const row = w => `<div class="wrow ${w.side} ${wallSet.has(w.side+w.p)?'wall':''}">
+      <span class="p">${fmtPx(w.p)}</span>
+      <span class="b" style="width:${Math.min(100, w.u/maxU*100)}%"></span>
+      <span class="u">$${(w.u/1e6).toFixed(2)}M${flagFor(w.p)}</span></div>`;
+  $('#wlad').innerHTML = A.slice(0,18).reverse().map(row).join('') +
+    `<div class="wmid"><span class="mp">${fmtPx(mid)}</span>
+     <span class="ms">MID · ${sym} · ATR1h ${atr?fmtPx(atr):'—'} · SPREAD ${((asks[0][0]-bids[0][0])/mid*1e4).toFixed(1)}bp</span></div>` +
+    B.slice(0,18).map(row).join('');
+  const trow = w => {
+    const dist = inR(w.p, w.side)*1e4;
+    const xatr = atr ? (Math.abs(w.p-mid)/atr).toFixed(2) : '—';
+    const age = persistAge(sym, w.side, w.p);
+    return `<tr><td style="color:${w.side==='bid'?'var(--green)':'var(--red)'}">${w.side.toUpperCase()}</td>
+      <td>${fmtPx(w.p)}</td><td style="color:var(--amber);font-weight:700">${(w.u/1e6).toFixed(2)}</td>
+      <td>${dist.toFixed(1)}bp</td><td>${xatr}</td>
+      <td>${age ?? '<span class="wstale">new</span>'}</td><td>${flagFor(w.p)||'—'}</td></tr>`;
+  };
+  $('#wtab').innerHTML = [...aw,...bw].map(trow).join('');
+  $('#wnote').innerHTML = `Top-5 walls per side within ±2% of mid · depth limit 500 · refreshes 12s · recorder persist layer: ${WPERSIST.generated_at ? WPERSIST.generated_at.slice(5,19).replace('T',' ')+'Z' : 'not yet available'}.`;
+}
+async function wallBoardSweep(){
+  for(let i=0; i<2 && universe.length; i++){
+    const s = universe[wBoardIdx++ % universe.length];
+    try{
+      const d = await jget(`/depth?symbol=${s}&limit=100`);
+      const bids = d.bids.map(x=>[+x[0],+x[1]]), asks = d.asks.map(x=>[+x[0],+x[1]]);
+      if(!bids.length || !asks.length) continue;
+      const mid = (bids[0][0]+asks[0][0])/2;
+      const agg = (lv,side) => { let big=null, sum=0;
+        for(const [p,q] of lv){
+          const dist = side==='bid' ? (mid-p)/mid : (p-mid)/mid;
+          if(dist < 0 || dist > 0.02) continue;
+          const u = p*q; sum += u; if(!big || u > big.u) big = {u, p, dist};
+        } return {big, sum}; };
+      const b = agg(bids,'bid'), a = agg(asks,'ask');
+      if(b.big && a.big) WBOARD.set(s, {b, a, ts: Date.now()});
+    }catch(e){}
+  }
+  if(WBOARD.size){
+    const rows = [...WBOARD.entries()].sort((x,y) => (y[1].b.sum/Math.max(1,y[1].a.sum)) - (x[1].b.sum/Math.max(1,x[1].a.sum)));
+    $('#wboard').innerHTML = rows.map(([s,v]) => {
+      const imb = v.b.sum/Math.max(1,v.a.sum);
+      const age = Math.floor((Date.now()-v.ts)/60000);
+      return `<tr><td class="sym">${s.replace('USDT','')}<span style="color:var(--faint);font-size:10px">/USDT</span></td>
+        <td style="color:var(--green)">$${(v.b.big.u/1e6).toFixed(2)}M</td><td style="color:var(--faint)">${(v.b.big.dist*1e4).toFixed(0)}bp</td>
+        <td style="color:var(--red)">$${(v.a.big.u/1e6).toFixed(2)}M</td><td style="color:var(--faint)">${(v.a.big.dist*1e4).toFixed(0)}bp</td>
+        <td style="color:${imb>=1.2?'var(--green)':(imb<=0.83?'var(--red)':'var(--dim)')};font-weight:700">${imb.toFixed(2)}</td>
+        <td style="color:var(--faint);font-size:10px">${age<1?'now':age+'m'}</td></tr>`;
+    }).join('');
+  }
+}
+async function wallTick(){
+  wallChips();
+  await Promise.all([renderWallsDetail(), wallBoardSweep()]);
+}
+
 (async () => {
   try{ PERSIST = (await (await fetch('persist.json')).json()).names || {}; }catch(e){}
   await Promise.all([discoverUniverse(), loadLevels()]);
   renderAlerts(); evalLevels(); setInterval(evalLevels, 60000);
   poll(); setInterval(poll, 30000);
+  loadWallsPersist(); wallTick();
+  setInterval(wallTick, 12000); setInterval(loadWallsPersist, 600000);
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
 })();
 </script>

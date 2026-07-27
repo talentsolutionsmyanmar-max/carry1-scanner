@@ -294,6 +294,7 @@
     <div class="tabrow">
       <button class="tab on" data-t="gate" onclick="switchTab('gate')">GATE</button>
       <button class="tab" data-t="ready" onclick="switchTab('ready')">READY?</button>
+      <button class="tab" data-t="tradfi" onclick="switchTab('tradfi')">TRADFI</button>
       <button class="tab" data-t="walls" onclick="switchTab('walls')">WALLS</button>
       <button class="tab" data-t="ticket" onclick="switchTab('ticket')">TICKET</button>
       <button class="tab" data-t="levels" onclick="switchTab('levels')">LEVELS</button>
@@ -366,6 +367,34 @@
       only sized through the pre-flight ticket (stop first, ≤1% risk, friction &lt;25% of stop distance), and every fill
       goes to the journal as evidence. Level calls are <b>unvalidated hypotheses</b> being scored; funding fires are
       <b>paper accounting</b> until Stage 2. When nothing clears, STAND DOWN is the position — silence is the honest output.
+    </div>
+  </div>
+  </div>
+
+  <div class="pane" id="pane-tradfi">
+  <div class="rdverdict wait">
+    <div class="stamp">T0 — OBSERVATION ONLY</div>
+    <div class="why" id="tfWhy">Tokenized TradFi proxies on MEXC spot — measured, never signaled. Loading…</div>
+  </div>
+  <div class="card">
+    <h3>tradfi proxy board — MEXC spot · 15-min recorder <span class="unval">TOKENIZED PROXIES · ISSUER RISK · NO SIGNALS</span></h3>
+    <table>
+      <thead><tr><th>SYMBOL</th><th>CLASS</th><th>LAST</th><th>24H Δ</th><th>SPREAD bp</th><th>$5K COST bp</th><th>24H QVOL</th></tr></thead>
+      <tbody id="tfBoard"><tr><td colspan="7" class="empty">waiting for recorder…</td></tr></tbody>
+    </table>
+    <h3 style="margin-top:22px">cross-issuer basis — same underlying, two tokens <span class="unval">HEDGE-LEG STUDY INPUT</span></h3>
+    <div id="tfBasis"></div>
+    <div id="tfGaps" style="margin-top:16px"></div>
+    <div class="wnote" style="margin-top:14px">
+      <b style="color:var(--amber)">Honesty block.</b> These are tokenized proxies (xStocks / Ondo / gold tokens),
+      not stocks and not the MEXC TradFi perps — they track price, confer <b>no ownership or voting</b>, and carry
+      issuer risk (June 2026: tokenized SpaceX campaigns were cancelled and &gt;$1B refunded across venues).
+      The actual TradFi <b>perp funding</b> — the carry-gate input — lives on MEXC's contract API, which is
+      edge-blocked from this host; that is a standing gap, published above, not worked around silently.
+      Kill zones for this asset class will be derived cash-market-anchored from this dataset, never inherited
+      from crypto zones. T0 observation → T1 pre-registered cost-floor study (~6 weeks) → only then any paper
+      gate discussion. If the proxies' measured friction stays this wide, the honest answer may be "not here" —
+      and that answer will be published too.
     </div>
   </div>
   </div>
@@ -1051,13 +1080,14 @@ function renderJournal(){
 }
 
 /* ── tab shell ── */
-const TABS = ['gate','ready','walls','ticket','levels','fable5'];
+const TABS = ['gate','ready','tradfi','walls','ticket','levels','fable5'];
 function switchTab(name){
   if(!TABS.includes(name)) name = 'gate';
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + name));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.t === name));
   try{ localStorage.setItem('carry1_tab', name); history.replaceState(null, '', '#' + name); }catch(e){}
   if(name === 'ready') renderReadiness();
+  if(name === 'tradfi') renderTradfi();
 }
 function updateChips(){
   const hot = document.getElementById('gate').classList.contains('fire');
@@ -1073,6 +1103,34 @@ function updateChips(){
     const m = rs.length % 2 ? rs[(rs.length - 1) / 2] : (rs[rs.length / 2 - 1] + rs[rs.length / 2]) / 2;
     $('#chipJ').innerHTML = 'JOURNAL <b>' + cl.length + ' closed · ' + m.toFixed(2) + 'R med</b>';
   } else $('#chipJ').innerHTML = 'JOURNAL <b>empty</b>';
+}
+
+/* ── tradfi door ── */
+async function renderTradfi(){
+  let d; try{ d = await (await fetch('tradfi.json?t=' + Date.now())).json(); }catch(e){ return; }
+  window._tf = d;
+  const day = Math.max(1, Math.round((Date.now() - Date.parse(d.dataset_started)) / 864e5));
+  const n = Object.keys(d.symbols || {}).length;
+  $('#tfWhy').innerHTML = `Dataset day <b>${day}</b> of ~42 · <b>${n}</b> proxies measured · updated ${(d.generated_at || '').slice(5,19).replace('T',' ')}Z. Tokens track price, confer <b>no ownership</b>, carry issuer risk — and perp funding is a standing gap below. Nothing here enters any gate.`;
+  const rows = Object.entries(d.symbols || {}).sort((a, b) => b[1].qvol24h - a[1].qvol24h);
+  $('#tfBoard').innerHTML = rows.length ? rows.map(([s, v]) => `<tr>
+      <td class="sym" title="${v.label}">${s.replace('USDT','')}</td>
+      <td style="font-size:10px;color:var(--dim)">${v.class}</td>
+      <td>${fmtPx(v.last)}</td>
+      <td style="color:${v.chg24h_bp >= 0 ? 'var(--green)' : 'var(--red)'}">${(v.chg24h_bp / 100).toFixed(2)}%</td>
+      <td>${v.spread_bp}</td>
+      <td style="font-weight:700;color:${v.cost_bp_5k == null ? 'var(--faint)' : (v.cost_bp_5k > 25 ? 'var(--red)' : (v.cost_bp_5k > 10 ? 'var(--amber)' : 'var(--green)'))}">${v.cost_bp_5k == null ? 'thin' : v.cost_bp_5k}</td>
+      <td>$${(v.qvol24h / 1e3).toFixed(0)}k</td>
+    </tr>`).join('')
+    : '<tr><td colspan="7" class="empty">no symbols fetched — recorder may be down</td></tr>';
+  $('#tfBasis').innerHTML = (d.basis || []).map(b => `<div style="display:flex;gap:12px;align-items:baseline;padding:8px 2px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap">
+      <b style="font-family:var(--mono)">${b.pair}</b>
+      <span style="font-family:var(--mono);font-weight:700;color:${Math.abs(b.bp) > 20 ? 'var(--amber)' : 'var(--cyan)'}">${b.bp > 0 ? '+' : ''}${b.bp} bp</span>
+      <span style="color:var(--faint);font-size:10px">${b.note}</span>
+    </div>`).join('') || '<div class="empty">—</div>';
+  $('#tfGaps').innerHTML =
+    (d.gaps || []).map(g => `<div style="font-size:11px;color:var(--dim);padding:6px 10px;border-left:2px solid var(--amber);margin-top:8px;line-height:1.6">${g}</div>`).join('')
+    + (d.traps || []).map(t => `<div style="font-size:11px;color:var(--dim);padding:6px 10px;border-left:2px solid var(--red);margin-top:8px;line-height:1.6">⚠ <b style="color:var(--txt)">${t.symbol}</b> — ${t.why}</div>`).join('');
 }
 
 /* ── readiness door ── */
@@ -1104,6 +1162,10 @@ async function renderReadiness(){
   try{ const f = await (await fetch('fable5.json?t=' + Date.now())).json();
     fbRows = f.history_rows; fbVal = (f.latest || {}).fusion_validity_pct ?? '—'; fbGate = (f.latest || {}).gate_decision || '—';
   }catch(e){}
+  let tfDay = '—';
+  try{ const t = await (await fetch('tradfi.json?t=' + Date.now())).json();
+    tfDay = 'dataset day ' + Math.max(1, Math.round((Date.now() - Date.parse(t.dataset_started)) / 864e5)) + ' of ~42';
+  }catch(e){}
   let wDays = '—';
   try{ let min = null;
     for(const s of Object.values(WPERSIST.symbols || {}))
@@ -1125,6 +1187,8 @@ async function renderReadiness(){
       '20+ resolutions → Wilson interval published either way', 'WAIT', 'wait'],
     ['FABLE-5 fusion', 'day ' + fbRows + '/30 · validity ' + fbVal + ' · ' + fbGate,
       '≥7 rows → calibrated, then validity ≥ 0.90 to leave PAPER_STANDBY', 'WAIT', 'wait'],
+    ['MEXC TradFi proxies', tfDay + ' · T0 observation',
+      'T1 cost-floor study (~6 wks) → paper gate; perp funding pending contract-API access', 'WAIT', 'wait'],
   ];
   $('#rdBoard').innerHTML = rows.map(r => `<tr><td style="font-weight:700">${r[0]}</td><td>${r[1]}</td>
     <td style="color:var(--dim);font-size:11px">${r[2]}</td><td><span class="rdgo ${r[4]}">${r[3]}</span></td></tr>`).join('');
@@ -1202,6 +1266,7 @@ async function renderFable5(){
   switchTab(location.hash.slice(1) || localStorage.getItem('carry1_tab') || 'gate');
   updateChips(); setInterval(updateChips, 5000);
   renderReadiness(); setInterval(renderReadiness, 60000);
+  renderTradfi(); setInterval(renderTradfi, 60000);
   ['pfSym','pfDir','pfEq','pfRisk','pfEntry','pfStop','pfR1','pfR2','pfR3']
     .forEach(id => { const el = document.getElementById(id); if(el) el.addEventListener('input', pfCalc); });
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();

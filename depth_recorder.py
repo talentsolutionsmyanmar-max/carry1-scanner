@@ -22,7 +22,11 @@ DOCTRINE / HONESTY (do not remove):
 import json, os, subprocess, sys, time, gzip, glob, urllib.request
 from datetime import datetime, timezone
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+_here = os.path.dirname(os.path.abspath(__file__))
+# Under Blueprint Automation the entry is materialized in the Automation's own
+# workspace; fall back to the canonical project root in that case.
+ROOT = _here if os.path.isdir(os.path.join(_here, "repo-staging", "web")) \
+    else "/Users/kokohtikeaung/Documents/kimi/workspace/product3-carry"
 HIST_DIR = os.path.join(ROOT, "depth_history")
 WEB = os.path.join(ROOT, "repo-staging", "web")
 WALLS_JSON = os.path.join(WEB, "walls.json")
@@ -129,7 +133,7 @@ def maybe_push(state):
         return f"push error: {e}"
 
 
-def main():
+def collect():
     os.makedirs(HIST_DIR, exist_ok=True)
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
@@ -149,8 +153,7 @@ def main():
     try:
         syms = universe()
     except Exception as e:
-        print(json.dumps({"artifact": {"ok": False, "error": f"universe: {e}"}}))
-        sys.exit(1)
+        return {"ok": False, "symbols": 0, "generated_at": now_iso, "error": f"universe: {e}"}
 
     day_file = os.path.join(HIST_DIR, now.strftime("%Y-%m-%d") + ".jsonl")
     out, n_snaps = {"generated_at": now_iso, "cadence_sec": 300,
@@ -191,9 +194,13 @@ def main():
 
     result = {"ok": True, "symbols": n_snaps, "history_file": os.path.basename(day_file),
               "push": push_res, "generated_at": now_iso}
-    print(json.dumps({"artifact": result}))
-    print(json.dumps(result))
+    return result
+
+
+def run(ctx):
+    """Managed Blueprint runner entrypoint — returns the AutomationOutput payload."""
+    return {"artifact": collect()}
 
 
 if __name__ == "__main__":
-    main()
+    print(json.dumps({"artifact": collect()}))

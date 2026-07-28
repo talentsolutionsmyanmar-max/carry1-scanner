@@ -376,6 +376,16 @@
     <div class="stamp">T0 — OBSERVATION ONLY</div>
     <div class="why" id="tfWhy">Tokenized TradFi proxies on MEXC spot — measured, never signaled. Loading…</div>
   </div>
+  <div class="card" style="margin-bottom:18px">
+    <h3>gold carry watch — Binance PAXG perp × MEXC gold proxies <span class="unval">PAPER · CROSS-VENUE · NEVER AUTO-FIRES</span></h3>
+    <div class="setup" style="margin-top:8px"><div class="ladder2" id="gwLadder" style="grid-template-columns:repeat(auto-fit,minmax(115px,1fr))"></div></div>
+    <div id="gwBasis" style="margin-top:12px"></div>
+    <div class="wnote" style="margin-top:12px">
+      θ=3bp is the crypto theta shown for continuity — gold funding hovers near zero, so <b>silence is the expected output</b>.
+      Re-deriving θ for gold is a pre-registered T1 question, not assumed. A FIRE-PAPER print here still means paper:
+      cross-venue execution, no auto-anything. Hedge leg = Binance spot PAXG; MEXC gold tokens are the basis watch, not the hedge.
+    </div>
+  </div>
   <div class="card">
     <h3>tradfi proxy board — MEXC spot · 15-min recorder <span class="unval">TOKENIZED PROXIES · ISSUER RISK · NO SIGNALS</span></h3>
     <table>
@@ -1112,6 +1122,19 @@ async function renderTradfi(){
   const day = Math.max(1, Math.round((Date.now() - Date.parse(d.dataset_started)) / 864e5));
   const n = Object.keys(d.symbols || {}).length;
   $('#tfWhy').innerHTML = `Dataset day <b>${day}</b> of ~42 · <b>${n}</b> proxies measured · updated ${(d.generated_at || '').slice(5,19).replace('T',' ')}Z. Tokens track price, confer <b>no ownership</b>, carry issuer risk — and perp funding is a standing gap below. Nothing here enters any gate.`;
+  const g = d.gold_watch || {};
+  const rung = (k, val, cls) => `<div class="rung2 ${cls || ''}"><div class="k">${k}</div><div class="v">${val == null ? '—' : val}</div></div>`;
+  $('#gwLadder').innerHTML =
+    rung('PAXG MARK', fmtPx(g.mark))
+    + rung('FUNDING LAST', g.funding_last_bp != null ? g.funding_last_bp + ' bp' : null)
+    + rung('PERSIST MEDIAN', g.persist_median_bp != null ? g.persist_median_bp + ' bp' : null)
+    + rung('EPOCHS', g.persist_n_epochs != null ? g.persist_n_epochs + ' × ' + (g.funding_interval_h || '?') + 'h' : null)
+    + rung('RT COST $5K', g.roundtrip_cost_bp != null ? g.roundtrip_cost_bp + ' bp' : null)
+    + rung('MARGIN −2×COST', g.margin_bp != null ? g.margin_bp + ' bp' : null, g.margin_bp != null && g.margin_bp >= 0 ? 'tp' : 'sl')
+    + rung('PERP 24H VOL', g.perp_qvol24h != null ? '$' + (g.perp_qvol24h / 1e6).toFixed(1) + 'M' : null)
+    + `<div class="rung2"><div class="k">GATE · θ ${g.theta_bp || 3}bp</div><div class="v" style="color:${g.gate === 'FIRE-PAPER' ? 'var(--amber)' : 'var(--dim)'}">${g.gate || '—'}</div></div>`;
+  $('#gwBasis').innerHTML = (g.basis || []).map(b =>
+    `<span class="chip2" style="margin:0 6px 6px 0">${b.pair} <b>${b.bp > 0 ? '+' : ''}${b.bp} bp</b></span>`).join('');
   const rows = Object.entries(d.symbols || {}).sort((a, b) => b[1].qvol24h - a[1].qvol24h);
   $('#tfBoard').innerHTML = rows.length ? rows.map(([s, v]) => `<tr>
       <td class="sym" title="${v.label}">${s.replace('USDT','')}</td>

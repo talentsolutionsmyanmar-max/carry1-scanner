@@ -31,19 +31,22 @@ else:
 
 FIVE_MINUTES_MS = 5 * 60 * 1000
 FIFTEEN_MINUTES_MS = 15 * 60 * 1000
+ONE_HOUR_MS = 60 * 60 * 1000
 
 
-def aggregate_15m(bars: tuple[Candle, ...]) -> tuple[Candle, ...]:
+def aggregate_bars(
+    bars: tuple[Candle, ...], bucket_ms: int, expected_count: int
+) -> tuple[Candle, ...]:
     buckets: dict[int, list[Candle]] = {}
     for bar in bars:
-        key = bar.open_time // FIFTEEN_MINUTES_MS
+        key = bar.open_time // bucket_ms
         buckets.setdefault(key, []).append(bar)
     out = []
     for key in sorted(buckets):
         group = sorted(buckets[key], key=lambda item: item.open_time)
-        if len(group) != 3:
+        if len(group) != expected_count:
             continue
-        if group[-1].close_time - group[0].open_time + 1 < FIFTEEN_MINUTES_MS:
+        if group[-1].close_time - group[0].open_time + 1 < bucket_ms:
             continue
         out.append(
             Candle(
@@ -67,15 +70,18 @@ def simulate_symbol(
     config: Config,
     assumed_spread_bp: float,
 ) -> list[dict]:
-    trend_bars = aggregate_15m(bars)
+    trend_bars = aggregate_bars(bars, FIFTEEN_MINUTES_MS, 3)
+    higher_bars = aggregate_bars(bars, ONE_HOUR_MS, 12)
     trend_closes = [bar.close_time for bar in trend_bars]
+    higher_closes = [bar.close_time for bar in higher_bars]
     trades = []
-    i = max(180, config.candle_limit)
+    i = max(config.candle_limit, 201 * 12)
     max_hold_bars = max(1, config.max_hold_minutes // 5)
     while i < len(bars) - 1:
         bar = bars[i]
         trend_end = bisect.bisect_right(trend_closes, bar.close_time)
-        if trend_end < 55:
+        higher_end = bisect.bisect_right(higher_closes, bar.close_time)
+        if trend_end < 55 or higher_end < 201:
             i += 1
             continue
         half_spread = assumed_spread_bp / 20_000.0
@@ -83,6 +89,7 @@ def simulate_symbol(
             symbol=symbol,
             primary=bars[max(0, i - config.candle_limit + 1) : i + 1],
             trend=trend_bars[max(0, trend_end - config.candle_limit) : trend_end],
+            higher=higher_bars[max(0, higher_end - config.candle_limit) : higher_end],
             bid=bar.close * (1.0 - half_spread),
             ask=bar.close * (1.0 + half_spread),
             mark=bar.close,
@@ -99,7 +106,7 @@ def simulate_symbol(
             equity_usd=config.starting_equity_usd,
             now=datetime.fromtimestamp(bar.close_time / 1000, tz=timezone.utc),
         )
-        if signal.state not in {"LONG", "SHORT"} or not signal.ticket:
+        if signal.state != "LIVE" or not signal.ticket:
             i += 1
             continue
 

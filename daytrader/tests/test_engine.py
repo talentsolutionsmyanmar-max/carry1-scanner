@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import math
 import unittest
+from datetime import datetime, timezone
 
 from daytrader.config import Config
-from daytrader.engine import atr, build_ticket, ema, evaluate_snapshot, rsi
+from daytrader.engine import adx, atr, build_ticket, ema, evaluate_snapshot, macd, rsi, stoch_rsi
 from daytrader.market import Candle, MarketSnapshot
 
 
@@ -79,12 +80,14 @@ class SignalTests(unittest.TestCase):
     def snapshot(self, spread_bp: float = 2.0) -> MarketSnapshot:
         primary = candles(90, 5, direction=1.0, breakout=True)
         trend = candles(90, 15, direction=1.0)
+        higher = candles(220, 60, direction=1.0)
         price = primary[-1].close
         half = spread_bp / 20_000.0
         return MarketSnapshot(
             symbol="TESTUSDT",
             primary=primary,
             trend=trend,
+            higher=higher,
             bid=price * (1 - half),
             ask=price * (1 + half),
             mark=price,
@@ -96,10 +99,14 @@ class SignalTests(unittest.TestCase):
 
     def test_long_breakout_produces_risk_sized_ticket(self):
         config = Config(
-            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=90.0
+            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=100.0,
+            min_volume_ratio=1.0, min_adx=10.0,
         )
-        signal = evaluate_snapshot(self.snapshot(), config)
-        self.assertEqual(signal.state, "LONG")
+        signal = evaluate_snapshot(
+            self.snapshot(), config, now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc)
+        )
+        self.assertEqual(signal.state, "LIVE")
+        self.assertEqual(signal.side, "LONG")
         self.assertIsNotNone(signal.ticket)
         self.assertLess(signal.ticket["stop"], signal.ticket["entry"])
         self.assertGreater(signal.ticket["tp2"], signal.ticket["entry"])
@@ -122,18 +129,43 @@ class SignalTests(unittest.TestCase):
 
     def test_wide_spread_fails_closed(self):
         config = Config(signal_score=70, min_reward_cost_multiple=1.0)
-        signal = evaluate_snapshot(self.snapshot(spread_bp=20.0), config)
-        self.assertNotEqual(signal.state, "LONG")
+        signal = evaluate_snapshot(
+            self.snapshot(spread_bp=20.0), config,
+            now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertNotEqual(signal.state, "LIVE")
         self.assertTrue(any("spread" in item for item in signal.blocked_by))
 
     def test_ticket_risk_is_bounded(self):
         config = Config(
-            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=90.0
+            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=100.0,
+            min_volume_ratio=1.0, min_adx=10.0,
         )
-        signal = evaluate_snapshot(self.snapshot(), config)
+        signal = evaluate_snapshot(
+            self.snapshot(), config, now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc)
+        )
         ticket = build_ticket(signal, config, equity_usd=5_000)
         self.assertLessEqual(ticket["notional_usd"], 2_500.01)
         self.assertTrue(math.isfinite(ticket["quantity"]))
+
+    def test_armed_ticket_is_visible_outside_kill_zone(self):
+        config = Config(
+            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=100.0,
+            min_volume_ratio=1.0, min_adx=10.0,
+        )
+        signal = evaluate_snapshot(
+            self.snapshot(), config, now=datetime(2026, 1, 1, 6, tzinfo=timezone.utc)
+        )
+        self.assertEqual(signal.state, "ARMED")
+        self.assertIsNotNone(signal.ticket)
+        self.assertIn("outside", " ".join(signal.blocked_by))
+
+    def test_extended_indicators_are_finite(self):
+        bars = candles(90, 5, direction=1.0)
+        closes = [bar.close for bar in bars]
+        self.assertTrue(all(math.isfinite(value) for value in macd(closes)))
+        self.assertTrue(math.isfinite(stoch_rsi(closes)))
+        self.assertTrue(math.isfinite(adx(bars)))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,12 @@
 
 *Run 2026-07-29. This is an in-sample diagnostic, not validation.*
 
+> **V2 status:** The dashboard now reports a broader multi-timeframe confluence
+> model and complete conditional trade tickets. That V2 logic was created after
+> observing the failed result below, so this sample cannot validate it. V2 must
+> remain paper-only until it passes a newly pre-registered out-of-sample and
+> forward-paper protocol with realistic execution data.
+
 ## Question
 
 Does the first intraday gate show enough basic promise to justify anything

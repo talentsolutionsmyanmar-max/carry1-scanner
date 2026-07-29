@@ -43,12 +43,14 @@ class Config:
 
     primary_interval: str = "5m"
     trend_interval: str = "15m"
-    candle_limit: int = 180
+    higher_interval: str = "1h"
+    candle_limit: int = 220
     breakout_lookback: int = 20
     volume_lookback: int = 20
     min_volume_ratio: float = 1.20
-    signal_score: int = 75
-    watch_score: int = 55
+    signal_score: int = 80
+    armed_score: int = 65
+    watch_score: int = 50
     long_rsi_min: float = 52.0
     long_rsi_max: float = 78.0
     short_rsi_min: float = 22.0
@@ -58,6 +60,10 @@ class Config:
     max_atr_pct: float = 3.00
     max_entry_drift_atr: float = 0.50
     stop_atr: float = 1.25
+    max_stop_atr: float = 4.00
+    max_friction_stop_pct: float = 25.0
+    min_adx: float = 18.0
+    entry_expiry_minutes: int = 20
     min_reward_cost_multiple: float = 3.0
 
     starting_equity_usd: float = 10_000.0

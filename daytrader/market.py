@@ -70,6 +70,11 @@ class MarketSnapshot:
     price_change_pct_24h: float
     quote_volume_24h: float
     captured_at: str
+    open_interest_usd: float | None = None
+    open_interest_change_15m_pct: float | None = None
+    open_interest_change_1h_pct: float | None = None
+    taker_buy_sell_ratio_15m: float | None = None
+    long_short_account_ratio: float | None = None
 
 
 class MarketDataError(RuntimeError):
@@ -115,6 +120,71 @@ class BinanceFuturesClient:
             if attempt + 1 < self.config.request_retries:
                 time.sleep(wait)
         raise MarketDataError(f"{path} failed: {last_error}")
+
+    def _get_optional(self, path: str, params: dict | None = None) -> Any | None:
+        """Read an auxiliary public feed without taking the core scanner down."""
+        try:
+            return self._get(path, params)
+        except MarketDataError:
+            return None
+
+    @staticmethod
+    def _change_pct(latest: float, earlier: float) -> float | None:
+        if latest <= 0 or earlier <= 0:
+            return None
+        return (latest / earlier - 1.0) * 100.0
+
+    def derivatives_context(self, symbol: str) -> dict[str, float | None]:
+        """Return auditable positioning context from Binance public 5m feeds.
+
+        These fields are not a liquidation heatmap. They describe changes in
+        reported open interest, aggressive taker flow, and account crowding.
+        """
+        common = {"symbol": symbol, "period": "5m"}
+        oi_rows = self._get_optional(
+            "/futures/data/openInterestHist", {**common, "limit": 13}
+        )
+        taker_rows = self._get_optional(
+            "/futures/data/takerlongshortRatio", {**common, "limit": 3}
+        )
+        ratio_rows = self._get_optional(
+            "/futures/data/globalLongShortAccountRatio", {**common, "limit": 1}
+        )
+
+        oi_rows = oi_rows if isinstance(oi_rows, list) else []
+        taker_rows = taker_rows if isinstance(taker_rows, list) else []
+        ratio_rows = ratio_rows if isinstance(ratio_rows, list) else []
+        oi_values = [float(row.get("sumOpenInterest") or 0.0) for row in oi_rows]
+        oi_usd = (
+            float(oi_rows[-1].get("sumOpenInterestValue") or 0.0)
+            if oi_rows
+            else None
+        )
+        oi_15m = (
+            self._change_pct(oi_values[-1], oi_values[-4])
+            if len(oi_values) >= 4
+            else None
+        )
+        oi_1h = (
+            self._change_pct(oi_values[-1], oi_values[-13])
+            if len(oi_values) >= 13
+            else None
+        )
+        buy_volume = sum(float(row.get("buyVol") or 0.0) for row in taker_rows)
+        sell_volume = sum(float(row.get("sellVol") or 0.0) for row in taker_rows)
+        taker_ratio = buy_volume / sell_volume if sell_volume > 0 else None
+        account_ratio = (
+            float(ratio_rows[-1].get("longShortRatio") or 0.0)
+            if ratio_rows
+            else None
+        )
+        return {
+            "open_interest_usd": oi_usd,
+            "open_interest_change_15m_pct": oi_15m,
+            "open_interest_change_1h_pct": oi_1h,
+            "taker_buy_sell_ratio_15m": taker_ratio,
+            "long_short_account_ratio": account_ratio,
+        }
 
     def top_symbols(self) -> list[str]:
         tickers = self._get("/fapi/v1/ticker/24hr")
@@ -175,6 +245,7 @@ class BinanceFuturesClient:
         )
         book = self._get("/fapi/v1/ticker/bookTicker", {"symbol": symbol})
         premium = self._get("/fapi/v1/premiumIndex", {"symbol": symbol})
+        derivatives = self.derivatives_context(symbol)
         context = self.ticker_context.get(symbol, {})
         return MarketSnapshot(
             symbol=symbol,
@@ -188,6 +259,7 @@ class BinanceFuturesClient:
             price_change_pct_24h=float(context.get("price_change_pct_24h") or 0.0),
             quote_volume_24h=float(context.get("quote_volume_24h") or 0.0),
             captured_at=datetime.now(timezone.utc).isoformat(),
+            **derivatives,
         )
 
     def historical_klines(

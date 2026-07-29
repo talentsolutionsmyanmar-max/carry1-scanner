@@ -6,6 +6,7 @@ const money = n => Number(n || 0).toLocaleString(undefined, {
   style: 'currency', currency: 'USD', maximumFractionDigits: 2
 });
 const num = (n, d = 1) => n == null ? '—' : Number(n).toFixed(d);
+const signedPct = (n, d = 2) => n == null ? '—' : `${Number(n) >= 0 ? '+' : ''}${Number(n).toFixed(d)}%`;
 const price = n => {
   if (n == null) return '—';
   const value = Number(n);
@@ -16,7 +17,11 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
 const pnlClass = n => Number(n) > 0 ? 'good' : Number(n) < 0 ? 'bad' : '';
-const FAPI = 'https://fapi.binance.com/fapi/v1';
+const compactUsd = n => n == null ? '—' : Number(n).toLocaleString(undefined, {
+  style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1
+});
+const API_BASE = 'https://fapi.binance.com';
+const FAPI = API_BASE + '/fapi/v1';
 const PAPER_KEY = 'carry_day_static_paper_v2';
 const STATIC_MODE = location.hostname.endsWith('.github.io') ||
   location.protocol === 'file:' || new URLSearchParams(location.search).has('static');
@@ -46,6 +51,7 @@ function relative(iso) {
 function signalRow(s) {
   const state = s.state || 'STAND_DOWN';
   const change = Number(s.price_change_pct_24h || 0);
+  const verdict = String(s.derivatives_verdict || 'UNAVAILABLE');
   return `<tr>
     <td><span class="symbol">${esc(s.symbol)}</span></td>
     <td><span class="state ${state.toLowerCase()}">${esc(state.replace('_', ' '))}</span></td>
@@ -54,8 +60,31 @@ function signalRow(s) {
     <td>${num(s.rsi_5m, 1)} / ${num(s.adx_5m, 1)}</td>
     <td class="${Number(s.volume_ratio) >= 1.2 ? 'amber' : ''}">${num(s.volume_ratio, 2)}×</td>
     <td>${num(s.friction_stop_pct, 1)}%</td><td>${num(s.spread_bp, 2)}bp</td>
+    <td><span class="deriv-pill ${verdict.toLowerCase()}">${esc(verdict)}</span></td>
     <td class="${pnlClass(change)}">${change >= 0 ? '+' : ''}${num(change, 2)}%</td>
   </tr>`;
+}
+
+function derivativesPanel(signal) {
+  const verdict = String(signal.derivatives_verdict || 'UNAVAILABLE');
+  const reasons = (signal.derivatives_reasons || []).slice(0, 3)
+    .map(item => `<li>${esc(item)}</li>`).join('');
+  const risk = String(signal.leverage_risk || 'UNKNOWN').replaceAll('_', ' ');
+  return `<section class="derivatives" aria-label="Derivatives positioning context">
+    <div class="derivatives-head">
+      <div><span class="derivatives-kicker">DERIVATIVES CONTEXT</span><small>BINANCE PUBLIC 5M FEEDS · NOT A LIQUIDATION MAP</small></div>
+      <span class="deriv-pill ${verdict.toLowerCase()}">${esc(verdict)}</span>
+    </div>
+    <div class="derivatives-grid">
+      <div><span>OPEN INTEREST</span><b>${compactUsd(signal.open_interest_usd)}</b></div>
+      <div><span>OI · 15M</span><b class="${pnlClass(signal.open_interest_change_15m_pct)}">${signedPct(signal.open_interest_change_15m_pct)}</b></div>
+      <div><span>OI · 1H</span><b class="${pnlClass(signal.open_interest_change_1h_pct)}">${signedPct(signal.open_interest_change_1h_pct)}</b></div>
+      <div><span>TAKER BUY / SELL</span><b>${num(signal.taker_buy_sell_ratio_15m, 2)}×</b></div>
+      <div><span>LONG / SHORT ACCTS</span><b>${num(signal.long_short_account_ratio, 2)}×</b></div>
+      <div><span>LEVERAGE RISK</span><b>${esc(risk)}</b></div>
+    </div>
+    <ul class="derivatives-notes">${reasons}</ul>
+  </section>`;
 }
 
 function ticketCard(signal) {
@@ -91,6 +120,7 @@ function ticketCard(signal) {
       <span>FUNDING<b>${num(signal.funding_bp, 2)}bp</b></span>
       <span>SESSION<b>${esc(signal.kill_zone)}</b></span>
     </div>
+    ${derivativesPanel(signal)}
     <div class="ticket-meta">
       <span>RISK <b>${money(t.risk_budget_usd)} · 0.25%</b></span>
       <span>SIZE <b>${money(t.notional_usd)}</b></span>
@@ -145,7 +175,7 @@ function render(s) {
   $('positionCap').textContent = 'concurrent paper positions';
   $('scanTime').textContent = `${relative(s.last_scan)} · ${s.scan_duration_seconds || 0}s sweep`;
   $('signals').innerHTML = signals.length ? signals.map(signalRow).join('') :
-    '<tr><td colspan="9" class="empty">No market snapshots available</td></tr>';
+    '<tr><td colspan="10" class="empty">No market snapshots available</td></tr>';
   $('ticketCount').textContent = strongest ?
     `STRONGEST · ${strongest.symbol} · ${strongest.state} · ${strongest.score}` :
     'NO ACTIONABLE TICKET';
@@ -169,10 +199,10 @@ function render(s) {
     $('heroSub').textContent = (risk.blocked_by || []).join(' · ');
   } else if (live.length) {
     $('hero').innerHTML = 'STRONGEST SETUP <em>LIVE</em>';
-    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100. Every indicator, trigger, kill-zone, execution-cost, and risk gate cleared. Paper simulation only.`;
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Every trigger, execution-cost, context, and risk gate cleared. Paper simulation only.`;
   } else if (armed.length) {
     $('hero').innerHTML = 'STRONGEST SETUP <em class="amber">ARMED</em>';
-    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100. Do not enter before the displayed trigger; every unresolved gate remains visible.`;
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Do not enter before the displayed trigger; every unresolved gate remains visible.`;
   } else {
     $('hero').innerHTML = 'STAND <em>DOWN</em>';
     $('heroSub').textContent = 'No setup currently has coherent multi-timeframe confluence. Waiting is the trade.';
@@ -180,9 +210,15 @@ function render(s) {
 }
 
 async function jget(path) {
-  const response = await fetch(FAPI + path, {cache: 'no-store'});
+  const base = path.startsWith('/futures/') ? API_BASE : FAPI;
+  const response = await fetch(base + path, {cache: 'no-store'});
   if (!response.ok) throw new Error(`${response.status} ${path}`);
   return response.json();
+}
+
+async function optionalJson(path) {
+  try { return await jget(path); }
+  catch (_) { return null; }
 }
 
 function candle(row) {
@@ -286,6 +322,41 @@ function killZone(date) {
   return 'OFF_HOURS';
 }
 
+function derivativesContext(snapshot, side, priceChange15mPct) {
+  const oi15m = snapshot.oiChange15mPct, oi1h = snapshot.oiChange1hPct;
+  const taker = snapshot.takerBuySellRatio15m, accounts = snapshot.longShortAccountRatio;
+  const funding = Number(snapshot.fundingBp || 0);
+  const available = [oi15m, taker, accounts].every(value => value != null);
+  const supports = [], conflicts = [];
+  if (side === 'LONG') {
+    if (taker != null && taker >= 1.08) supports.push(`15m taker buying ${taker.toFixed(2)}× sell volume`);
+    else if (taker != null && taker <= 0.92) conflicts.push(`15m taker selling dominates at ${taker.toFixed(2)}×`);
+    if (oi15m != null && oi15m >= 0.25 && priceChange15mPct >= 0.10) supports.push(`OI +${oi15m.toFixed(2)}% expands with rising 15m price`);
+    else if (oi15m != null && oi15m >= 0.25 && priceChange15mPct <= -0.10) conflicts.push(`OI +${oi15m.toFixed(2)}% expands while 15m price falls`);
+    if (accounts != null && accounts <= 0.67 && funding <= -3) supports.push('short crowding leaves upside squeeze fuel');
+    else if (accounts != null && accounts >= 1.50 && funding >= 3) conflicts.push('long accounts and positive funding are crowded');
+  } else {
+    if (taker != null && taker <= 0.92) supports.push(`15m taker selling dominates at ${taker.toFixed(2)}×`);
+    else if (taker != null && taker >= 1.08) conflicts.push(`15m taker buying ${taker.toFixed(2)}× sell volume`);
+    if (oi15m != null && oi15m >= 0.25 && priceChange15mPct <= -0.10) supports.push(`OI +${oi15m.toFixed(2)}% expands with falling 15m price`);
+    else if (oi15m != null && oi15m >= 0.25 && priceChange15mPct >= 0.10) conflicts.push(`OI +${oi15m.toFixed(2)}% expands while 15m price rises`);
+    if (accounts != null && accounts >= 1.50 && funding >= 3) supports.push('long crowding leaves downside liquidation risk');
+    else if (accounts != null && accounts <= 0.67 && funding <= -3) conflicts.push('short accounts and negative funding are crowded');
+  }
+  let leverageRisk = 'UNKNOWN';
+  if (accounts != null && accounts >= 1.50 && funding >= 3) leverageRisk = 'LONGS_CROWDED';
+  else if (accounts != null && accounts <= 0.67 && funding <= -3) leverageRisk = 'SHORTS_CROWDED';
+  else if (oi15m != null && oi15m <= -0.50) leverageRisk = 'DELEVERAGING';
+  else if (oi15m != null && oi15m >= 0.50) leverageRisk = 'LEVERAGE_BUILDING';
+  else if (available) leverageRisk = 'BALANCED';
+  let verdict, reasons;
+  if (!available) { verdict = 'UNAVAILABLE'; reasons = ['one or more public derivatives feeds are unavailable']; }
+  else if (conflicts.length >= 2) { verdict = 'CONFLICTS'; reasons = [...conflicts, ...supports]; }
+  else if (supports.length >= 2 && !conflicts.length) { verdict = 'SUPPORTS'; reasons = supports; }
+  else { verdict = 'NEUTRAL'; reasons = [...conflicts, ...supports]; if (!reasons.length) reasons.push('positioning is mixed; no two-factor edge'); }
+  return {verdict, available, leverageRisk, reasons, oi15m, oi1h, taker, accounts};
+}
+
 async function universe() {
   const [tickers, exchange] = await Promise.all([jget('/ticker/24hr'), jget('/exchangeInfo')]);
   const now = Date.now();
@@ -303,20 +374,35 @@ async function universe() {
 
 async function market(context) {
   const symbol = encodeURIComponent(context.symbol);
-  const [primaryRows, trendRows, higherRows, book, premium] = await Promise.all([
+  const [primaryRows, trendRows, higherRows, book, premium, oiRows, takerRows, accountRows] = await Promise.all([
     jget(`/klines?symbol=${symbol}&interval=5m&limit=221`),
     jget(`/klines?symbol=${symbol}&interval=15m&limit=221`),
     jget(`/klines?symbol=${symbol}&interval=1h&limit=221`),
-    jget(`/ticker/bookTicker?symbol=${symbol}`), jget(`/premiumIndex?symbol=${symbol}`)
+    jget(`/ticker/bookTicker?symbol=${symbol}`), jget(`/premiumIndex?symbol=${symbol}`),
+    optionalJson(`/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=13`),
+    optionalJson(`/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&limit=3`),
+    optionalJson(`/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`)
   ]);
   const now = Date.now();
+  const oi = Array.isArray(oiRows) ? oiRows : [];
+  const oiValues = oi.map(row => Number(row.sumOpenInterest || 0));
+  const pctChange = (latest, earlier) => latest > 0 && earlier > 0 ? (latest / earlier - 1) * 100 : null;
+  const taker = Array.isArray(takerRows) ? takerRows : [];
+  const buyVolume = taker.reduce((sum, row) => sum + Number(row.buyVol || 0), 0);
+  const sellVolume = taker.reduce((sum, row) => sum + Number(row.sellVol || 0), 0);
+  const accounts = Array.isArray(accountRows) ? accountRows : [];
   return {
     ...context,
     primary: primaryRows.map(candle).filter(bar => bar.closeTime < now),
     trend: trendRows.map(candle).filter(bar => bar.closeTime < now),
     higher: higherRows.map(candle).filter(bar => bar.closeTime < now),
     bid: Number(book.bidPrice || 0), ask: Number(book.askPrice || 0),
-    mark: Number(premium.markPrice || 0), fundingBp: Number(premium.lastFundingRate || 0) * 10000
+    mark: Number(premium.markPrice || 0), fundingBp: Number(premium.lastFundingRate || 0) * 10000,
+    openInterestUsd: oi.length ? Number(oi.at(-1).sumOpenInterestValue || 0) : null,
+    oiChange15mPct: oiValues.length >= 4 ? pctChange(oiValues.at(-1), oiValues.at(-4)) : null,
+    oiChange1hPct: oiValues.length >= 13 ? pctChange(oiValues.at(-1), oiValues.at(-13)) : null,
+    takerBuySellRatio15m: sellVolume > 0 ? buyVolume / sellVolume : null,
+    longShortAccountRatio: accounts.length ? Number(accounts.at(-1).longShortRatio || 0) : null
   };
 }
 
@@ -369,6 +455,8 @@ function evaluate(snapshot, equity, now = new Date()) {
   };
   const closes = primary.map(bar => bar.close), trendCloses = trend.map(bar => bar.close);
   const higherCloses = higher.map(bar => bar.close), current = primary.at(-1);
+  const priceChange15mPct = primary.length >= 4 && primary.at(-4).close > 0 ?
+    (current.close / primary.at(-4).close - 1) * 100 : 0;
   const ema9 = emaLast(closes, 9), ema21 = emaLast(closes, 21);
   const trend20 = emaLast(trendCloses, 20), trend50 = emaLast(trendCloses, 50);
   const higher50 = emaLast(higherCloses, 50), higher200 = emaLast(higherCloses, 200);
@@ -412,7 +500,8 @@ function evaluate(snapshot, equity, now = new Date()) {
     }
   };
   function scored(side) {
-    const d = definitions[side], plannedEntry = d.breakout ? mark : d.trigger;
+    const d = definitions[side], derivatives = derivativesContext(snapshot, side, priceChange15mPct);
+    const plannedEntry = d.breakout ? mark : d.trigger;
     const stop = side === 'LONG' ?
       Math.min(plannedEntry - CFG.stopAtr * currentAtr, swingLow - 0.1 * currentAtr) :
       Math.max(plannedEntry + CFG.stopAtr * currentAtr, swingHigh + 0.1 * currentAtr);
@@ -444,10 +533,12 @@ function evaluate(snapshot, equity, now = new Date()) {
     }
     const nearTrigger = Math.abs(current.close - d.level) <= 1.5 * currentAtr || d.breakout;
     const coreBias = ['higher', 'trend', 'alignment'].filter(key => d[key]).length >= 2;
+    const derivativesClear = derivatives.verdict !== 'CONFLICTS';
+    if (!derivativesClear) blocks.push('derivatives context conflicts on at least two independent factors');
     const live = score >= CFG.signalScore && ['higher', 'trend', 'alignment', 'macd', 'momentum', 'adx', 'vwap'].every(key => d[key]) &&
-      volumeOk && controlledBreakout && execution && zone !== 'OFF_HOURS';
-    const armed = score >= CFG.armedScore && coreBias && nearTrigger && execution;
-    return {...d, side, score: Math.min(100, score), entry: plannedEntry, stop, stopBp, frictionStopPct, reasons, blocks, live, armed};
+      volumeOk && controlledBreakout && execution && derivativesClear && zone !== 'OFF_HOURS';
+    const armed = score >= CFG.armedScore && coreBias && nearTrigger && execution && derivativesClear;
+    return {...d, side, score: Math.min(100, score), entry: plannedEntry, stop, stopBp, frictionStopPct, reasons, blocks, live, armed, derivatives};
   }
   const choice = [scored('LONG'), scored('SHORT')].sort((a, b) => b.score - a.score)[0];
   const state = choice.live ? 'LIVE' : choice.armed ? 'ARMED' : choice.score >= CFG.watchScore ? 'WATCH' : 'STAND_DOWN';
@@ -469,6 +560,12 @@ function evaluate(snapshot, equity, now = new Date()) {
     volume_ratio: volumeRatio, breakout_level: choice.level,
     higher_trend: choice.higher ? choice.trendName : 'MIXED', trend_15m: choice.trend ? choice.trendName : 'MIXED',
     kill_zone: zone, funding_bp: snapshot.fundingBp, price_change_pct_24h: snapshot.change,
+    derivatives_verdict: choice.derivatives.verdict, derivatives_available: choice.derivatives.available,
+    open_interest_usd: snapshot.openInterestUsd, open_interest_change_15m_pct: snapshot.oiChange15mPct,
+    open_interest_change_1h_pct: snapshot.oiChange1hPct,
+    taker_buy_sell_ratio_15m: snapshot.takerBuySellRatio15m,
+    long_short_account_ratio: snapshot.longShortAccountRatio,
+    leverage_risk: choice.derivatives.leverageRisk, derivatives_reasons: choice.derivatives.reasons,
     quote_volume_24h: snapshot.quoteVolume, expires_at: expires.toISOString(), invalidation,
     reasons: choice.reasons, blocked_by: choice.blocks, ticket: null
   };

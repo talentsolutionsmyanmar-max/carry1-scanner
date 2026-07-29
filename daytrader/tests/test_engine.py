@@ -77,12 +77,21 @@ class IndicatorTests(unittest.TestCase):
 
 
 class SignalTests(unittest.TestCase):
-    def snapshot(self, spread_bp: float = 2.0) -> MarketSnapshot:
+    def snapshot(self, spread_bp: float = 2.0, **derivatives) -> MarketSnapshot:
         primary = candles(90, 5, direction=1.0, breakout=True)
         trend = candles(90, 15, direction=1.0)
         higher = candles(220, 60, direction=1.0)
         price = primary[-1].close
         half = spread_bp / 20_000.0
+        context = {
+            "funding_bp": 0.2,
+            "open_interest_usd": None,
+            "open_interest_change_15m_pct": None,
+            "open_interest_change_1h_pct": None,
+            "taker_buy_sell_ratio_15m": None,
+            "long_short_account_ratio": None,
+        }
+        context.update(derivatives)
         return MarketSnapshot(
             symbol="TESTUSDT",
             primary=primary,
@@ -91,10 +100,10 @@ class SignalTests(unittest.TestCase):
             bid=price * (1 - half),
             ask=price * (1 + half),
             mark=price,
-            funding_bp=0.2,
             price_change_pct_24h=2.0,
             quote_volume_24h=1_000_000_000,
             captured_at="2026-01-01T00:00:00+00:00",
+            **context,
         )
 
     def test_long_breakout_produces_risk_sized_ticket(self):
@@ -135,6 +144,49 @@ class SignalTests(unittest.TestCase):
         )
         self.assertNotEqual(signal.state, "LIVE")
         self.assertTrue(any("spread" in item for item in signal.blocked_by))
+
+    def test_supportive_derivatives_context_is_reported_separately(self):
+        config = Config(
+            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=100.0,
+            min_volume_ratio=1.0, min_adx=10.0,
+        )
+        signal = evaluate_snapshot(
+            self.snapshot(
+                open_interest_usd=2_000_000_000,
+                open_interest_change_15m_pct=0.8,
+                open_interest_change_1h_pct=1.6,
+                taker_buy_sell_ratio_15m=1.25,
+                long_short_account_ratio=1.0,
+            ),
+            config,
+            now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(signal.state, "LIVE")
+        self.assertEqual(signal.derivatives_verdict, "SUPPORTS")
+        self.assertTrue(signal.derivatives_available)
+        self.assertEqual(signal.score, signal.ticket["score"])
+
+    def test_two_factor_derivatives_conflict_vetoes_actionable_ticket(self):
+        config = Config(
+            signal_score=70, min_reward_cost_multiple=1.0, long_rsi_max=100.0,
+            min_volume_ratio=1.0, min_adx=10.0,
+        )
+        signal = evaluate_snapshot(
+            self.snapshot(
+                funding_bp=5.0,
+                open_interest_usd=2_000_000_000,
+                open_interest_change_15m_pct=0.8,
+                open_interest_change_1h_pct=1.6,
+                taker_buy_sell_ratio_15m=0.70,
+                long_short_account_ratio=2.0,
+            ),
+            config,
+            now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(signal.derivatives_verdict, "CONFLICTS")
+        self.assertEqual(signal.state, "WATCH")
+        self.assertIsNone(signal.ticket)
+        self.assertTrue(any("derivatives context conflicts" in item for item in signal.blocked_by))
 
     def test_ticket_risk_is_bounded(self):
         config = Config(

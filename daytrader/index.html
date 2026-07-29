@@ -14,8 +14,9 @@
       --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
     }
     * { box-sizing:border-box }
+    html { overflow-x:hidden; overflow-x:clip }
     body {
-      margin:0; min-height:100vh; color:var(--ink);
+      margin:0; min-height:100vh; overflow-x:hidden; overflow-x:clip; color:var(--ink);
       font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
       background:
         radial-gradient(900px 450px at 15% -8%,rgba(61,217,235,.12),transparent 60%),
@@ -59,12 +60,12 @@
     .amber { color:var(--amber)!important } .cyan { color:var(--cyan)!important }
 
     .layout { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(310px,.65fr); gap:18px; margin-top:18px }
-    .panel { border:1px solid var(--line); border-radius:16px; background:rgba(13,20,33,.9); overflow:hidden }
+    .panel { min-width:0; border:1px solid var(--line); border-radius:16px; background:rgba(13,20,33,.9); overflow:hidden }
     .panel-head { min-height:54px; padding:14px 17px; display:flex; align-items:center; gap:10px;
       border-bottom:1px solid var(--line) }
     .panel-head h2 { margin:0; font-size:10px; letter-spacing:.2em; color:var(--muted); text-transform:uppercase }
     .panel-head .count { margin-left:auto; color:var(--faint); font:10px var(--mono) }
-    .table-wrap { overflow:auto }
+    .table-wrap { max-width:100%; overflow:auto; contain:inline-size }
     table { width:100%; border-collapse:collapse; font:12px var(--mono); white-space:nowrap }
     th { text-align:right; color:var(--faint); font-size:9px; letter-spacing:.11em; font-weight:500;
       padding:10px 13px; background:rgba(7,11,18,.45) }
@@ -108,6 +109,24 @@
       background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden }
     .indicator-grid span { padding:7px 8px; color:var(--faint); background:#0b121f; font:7px var(--mono); letter-spacing:.07em }
     .indicator-grid b { display:block; color:var(--muted); font:600 9px var(--mono); margin-top:2px; letter-spacing:0; overflow:hidden; text-overflow:ellipsis }
+    .derivatives { margin-top:10px; padding:11px; border:1px solid rgba(107,140,255,.24); border-radius:10px;
+      background:linear-gradient(135deg,rgba(107,140,255,.065),rgba(61,217,235,.025)) }
+    .derivatives-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:9px }
+    .derivatives-kicker { display:block; color:#a9baff; font:700 9px var(--mono); letter-spacing:.14em }
+    .derivatives-head small { display:block; margin-top:2px; color:var(--faint); font:7px var(--mono); letter-spacing:.07em }
+    .deriv-pill { display:inline-flex; align-items:center; justify-content:center; min-height:22px; padding:3px 8px;
+      border:1px solid var(--line); border-radius:99px; color:var(--muted); font:700 8px var(--mono); letter-spacing:.08em }
+    .deriv-pill.supports { color:#8ce7c4; border-color:rgba(50,212,154,.36); background:rgba(50,212,154,.08) }
+    .deriv-pill.conflicts { color:#ff9baa; border-color:rgba(255,101,122,.38); background:rgba(255,101,122,.08) }
+    .deriv-pill.neutral { color:#c9d2ff; border-color:rgba(107,140,255,.36); background:rgba(107,140,255,.08) }
+    .deriv-pill.unavailable { color:var(--muted); border-color:var(--line); background:rgba(126,141,168,.05) }
+    .derivatives-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:1px; overflow:hidden;
+      border:1px solid rgba(32,43,63,.8); border-radius:8px; background:var(--line) }
+    .derivatives-grid div { min-width:0; padding:7px 8px; background:#0b121f }
+    .derivatives-grid span { display:block; color:var(--faint); font:7px var(--mono); letter-spacing:.07em; white-space:nowrap }
+    .derivatives-grid b { display:block; margin-top:2px; color:var(--ink); font:600 9px var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .derivatives-notes { display:flex; flex-wrap:wrap; gap:5px 14px; margin:8px 0 0; padding:0; list-style:none; color:var(--muted); font-size:8px }
+    .derivatives-notes li:before { content:""; display:inline-block; width:4px; height:4px; margin:0 5px 1px 0; border-radius:50%; background:var(--blue) }
     .ticket-meta { display:grid; grid-template-columns:repeat(3,1fr); gap:7px 12px; margin:12px 0; color:var(--faint); font:8px var(--mono); letter-spacing:.07em }
     .ticket-meta b { color:var(--muted); font-weight:600; margin-left:3px }
     .evidence-list { display:flex; gap:5px; flex-wrap:wrap }
@@ -149,6 +168,7 @@
       .metric { border-left:0; border-top:1px solid var(--line); padding:12px 0 0 }
       .layout { grid-template-columns:1fr }
       .tickets { grid-template-columns:1fr }
+      .derivatives-grid { grid-template-columns:repeat(3,1fr) }
     }
     @media(max-width:650px) {
       .shell { width:min(100% - 20px,1420px); padding-top:16px }
@@ -157,6 +177,7 @@
       .metric .v { font-size:17px }
       .levels { grid-template-columns:repeat(2,1fr) }.levels div { border-top:1px solid var(--line) }
       .indicator-grid { grid-template-columns:repeat(3,1fr) }
+      .derivatives-grid { grid-template-columns:repeat(2,1fr) }
       .ticket-meta { grid-template-columns:repeat(2,1fr) }
       .method { display:block }.method .formula { white-space:normal; margin-bottom:8px }
     }
@@ -167,7 +188,7 @@
   <header>
     <div class="brand">
       <div class="mark"></div>
-      <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">closed-candle intraday signal desk</div></div>
+      <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">closed-candle + derivatives-aware signal desk</div></div>
     </div>
     <div class="status"><i class="dot" id="dot"></i><span id="status">CONNECTING</span></div>
     <div class="paper">PAPER ONLY · V2 UNVALIDATED</div>
@@ -195,8 +216,8 @@
       <div class="panel-head"><h2>liquid USDT perpetuals · signal board</h2><div class="count" id="scanTime">not scanned</div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SIDE</th><th>SCORE</th><th>RSI / ADX</th><th>VOL ×</th><th>COST/STOP</th><th>SPREAD</th><th>24H</th></tr></thead>
-          <tbody id="signals"><tr><td colspan="9" class="empty">warming market data…</td></tr></tbody>
+          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SIDE</th><th>SCORE</th><th>RSI / ADX</th><th>VOL ×</th><th>COST/STOP</th><th>SPREAD</th><th>DERIV</th><th>24H</th></tr></thead>
+          <tbody id="signals"><tr><td colspan="10" class="empty">warming market data…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -222,8 +243,8 @@
   </div>
 
   <section class="method">
-    <div class="formula">LIVE ⇔ 1h regime + 15m trend + 5m trigger + EMA + MACD + RSI/Stoch RSI + ADX + VWAP + Bollinger/ATR + volume + friction + kill zone</div>
-    <div><b>Ticket states:</b> LIVE cleared every gate; ARMED is a conditional stop-entry plan with unresolved gates shown; WATCH is analysis only; STAND DOWN means no trade. Targets are 1R/2R/3R after modeled fees, spread, and slippage. Risk defaults to 0.25% of paper equity. V2 is unvalidated research and never sends an exchange order.</div>
+    <div class="formula">LIVE ⇔ 1h regime + 15m trend + 5m trigger + momentum + volume + friction + OI/taker/crowding context + kill zone</div>
+    <div><b>Ticket states:</b> LIVE cleared every gate; ARMED is a conditional stop-entry plan; WATCH is analysis only; STAND DOWN means no trade. The derivatives panel uses Binance public open-interest, taker-flow, funding, and account-ratio feeds. It is not CoinGlass data and not a liquidation map. A two-factor derivatives conflict vetoes actionable status without adding points to the technical score. V2 remains unvalidated paper research and never sends an exchange order.</div>
   </section>
 </main>
 <script src="static.js"></script>

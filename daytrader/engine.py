@@ -171,6 +171,15 @@ class Signal:
     trend_15m: str | None = None
     kill_zone: str | None = None
     funding_bp: float | None = None
+    derivatives_verdict: str = "UNAVAILABLE"
+    derivatives_available: bool = False
+    open_interest_usd: float | None = None
+    open_interest_change_15m_pct: float | None = None
+    open_interest_change_1h_pct: float | None = None
+    taker_buy_sell_ratio_15m: float | None = None
+    long_short_account_ratio: float | None = None
+    leverage_risk: str = "UNKNOWN"
+    derivatives_reasons: tuple[str, ...] = ()
     price_change_pct_24h: float | None = None
     quote_volume_24h: float | None = None
     expires_at: str | None = None
@@ -183,7 +192,92 @@ class Signal:
         data = asdict(self)
         data["reasons"] = list(self.reasons)
         data["blocked_by"] = list(self.blocked_by)
+        data["derivatives_reasons"] = list(self.derivatives_reasons)
         return data
+
+
+def derivatives_context(
+    snapshot: MarketSnapshot,
+    side: str,
+    price_change_15m_pct: float,
+) -> dict:
+    """Classify derivatives positioning without claiming liquidation levels.
+
+    The verdict is deliberately separate from the 100-point technical score.
+    Only an explicit two-factor conflict can veto an actionable ticket.
+    """
+    oi_15m = snapshot.open_interest_change_15m_pct
+    oi_1h = snapshot.open_interest_change_1h_pct
+    taker = snapshot.taker_buy_sell_ratio_15m
+    accounts = snapshot.long_short_account_ratio
+    funding = snapshot.funding_bp
+    available = all(value is not None for value in (oi_15m, taker, accounts))
+    supports: list[str] = []
+    conflicts: list[str] = []
+
+    if side == "LONG":
+        if taker is not None and taker >= 1.08:
+            supports.append(f"15m taker buying {taker:.2f}× sell volume")
+        elif taker is not None and taker <= 0.92:
+            conflicts.append(f"15m taker selling dominates at {taker:.2f}×")
+        if oi_15m is not None and oi_15m >= 0.25 and price_change_15m_pct >= 0.10:
+            supports.append(f"OI +{oi_15m:.2f}% expands with rising 15m price")
+        elif oi_15m is not None and oi_15m >= 0.25 and price_change_15m_pct <= -0.10:
+            conflicts.append(f"OI +{oi_15m:.2f}% expands while 15m price falls")
+        if accounts is not None and accounts <= 0.67 and funding <= -3.0:
+            supports.append("short crowding leaves upside squeeze fuel")
+        elif accounts is not None and accounts >= 1.50 and funding >= 3.0:
+            conflicts.append("long accounts and positive funding are crowded")
+    else:
+        if taker is not None and taker <= 0.92:
+            supports.append(f"15m taker selling dominates at {taker:.2f}×")
+        elif taker is not None and taker >= 1.08:
+            conflicts.append(f"15m taker buying {taker:.2f}× sell volume")
+        if oi_15m is not None and oi_15m >= 0.25 and price_change_15m_pct <= -0.10:
+            supports.append(f"OI +{oi_15m:.2f}% expands with falling 15m price")
+        elif oi_15m is not None and oi_15m >= 0.25 and price_change_15m_pct >= 0.10:
+            conflicts.append(f"OI +{oi_15m:.2f}% expands while 15m price rises")
+        if accounts is not None and accounts >= 1.50 and funding >= 3.0:
+            supports.append("long crowding leaves downside liquidation risk")
+        elif accounts is not None and accounts <= 0.67 and funding <= -3.0:
+            conflicts.append("short accounts and negative funding are crowded")
+
+    if accounts is not None and accounts >= 1.50 and funding >= 3.0:
+        leverage_risk = "LONGS_CROWDED"
+    elif accounts is not None and accounts <= 0.67 and funding <= -3.0:
+        leverage_risk = "SHORTS_CROWDED"
+    elif oi_15m is not None and oi_15m <= -0.50:
+        leverage_risk = "DELEVERAGING"
+    elif oi_15m is not None and oi_15m >= 0.50:
+        leverage_risk = "LEVERAGE_BUILDING"
+    elif available:
+        leverage_risk = "BALANCED"
+    else:
+        leverage_risk = "UNKNOWN"
+
+    if not available:
+        verdict = "UNAVAILABLE"
+        reasons = ["one or more public derivatives feeds are unavailable"]
+    elif len(conflicts) >= 2:
+        verdict = "CONFLICTS"
+        reasons = conflicts + supports
+    elif len(supports) >= 2 and not conflicts:
+        verdict = "SUPPORTS"
+        reasons = supports
+    else:
+        verdict = "NEUTRAL"
+        reasons = conflicts + supports or ["positioning is mixed; no two-factor edge"]
+    return {
+        "verdict": verdict,
+        "available": available,
+        "leverage_risk": leverage_risk,
+        "reasons": tuple(reasons),
+        "oi_15m": oi_15m,
+        "oi_1h": oi_1h,
+        "taker": taker,
+        "accounts": accounts,
+        "open_interest_usd": snapshot.open_interest_usd,
+    }
 
 
 def _round_price(value: float) -> float:
@@ -275,6 +369,11 @@ def evaluate_snapshot(
             score=0,
             action="WAIT — indicator warm-up",
             funding_bp=snapshot.funding_bp,
+            open_interest_usd=snapshot.open_interest_usd,
+            open_interest_change_15m_pct=snapshot.open_interest_change_15m_pct,
+            open_interest_change_1h_pct=snapshot.open_interest_change_1h_pct,
+            taker_buy_sell_ratio_15m=snapshot.taker_buy_sell_ratio_15m,
+            long_short_account_ratio=snapshot.long_short_account_ratio,
             price_change_pct_24h=snapshot.price_change_pct_24h,
             quote_volume_24h=snapshot.quote_volume_24h,
             blocked_by=(
@@ -287,6 +386,11 @@ def evaluate_snapshot(
     trend_closes = [bar.close for bar in trend]
     higher_closes = [bar.close for bar in higher]
     current = primary[-1]
+    price_change_15m_pct = (
+        (current.close / primary[-4].close - 1.0) * 100.0
+        if len(primary) >= 4 and primary[-4].close > 0
+        else 0.0
+    )
     current_rsi = rsi(closes, 14)[-1]
     current_atr = atr(primary, 14)[-1]
     current_adx = adx(primary, 14)
@@ -361,6 +465,7 @@ def evaluate_snapshot(
 
     def scored(side: str) -> dict:
         item = definitions[side]
+        derivatives = derivatives_context(snapshot, side, price_change_15m_pct)
         direction = 1.0 if side == "LONG" else -1.0
         live_entry = mark
         planned_entry = live_entry if item["breakout"] else item["trigger"]
@@ -429,12 +534,19 @@ def evaluate_snapshot(
                 blocks.append(f"friction consumes {friction_stop_pct:.1f}% of stop")
         near_trigger = abs(current.close - item["level"]) <= 1.50 * current_atr or item["breakout"]
         core_bias = sum(bool(item[key]) for key in ("higher", "trend", "alignment")) >= 2
+        derivatives_clear = derivatives["verdict"] != "CONFLICTS"
+        if not derivatives_clear:
+            blocks.append("derivatives context conflicts on at least two independent factors")
         live = (
             score >= config.signal_score
             and all(item[key] for key in ("higher", "trend", "alignment", "macd", "momentum", "adx", "vwap"))
-            and volume_ok and controlled_breakout and execution and zone != "OFF_HOURS"
+            and volume_ok and controlled_breakout and execution and derivatives_clear
+            and zone != "OFF_HOURS"
         )
-        armed = score >= config.armed_score and core_bias and near_trigger and execution
+        armed = (
+            score >= config.armed_score and core_bias and near_trigger
+            and execution and derivatives_clear
+        )
         return {
             **item,
             "side": side,
@@ -448,6 +560,7 @@ def evaluate_snapshot(
             "live": live,
             "armed": armed,
             "direction": direction,
+            "derivatives": derivatives,
         }
 
     choices = sorted((scored("LONG"), scored("SHORT")), key=lambda item: item["score"], reverse=True)
@@ -513,6 +626,15 @@ def evaluate_snapshot(
         trend_15m=str(choice["trend_name"]) if choice["trend"] else "MIXED",
         kill_zone=zone,
         funding_bp=round(snapshot.funding_bp, 3),
+        derivatives_verdict=str(choice["derivatives"]["verdict"]),
+        derivatives_available=bool(choice["derivatives"]["available"]),
+        open_interest_usd=snapshot.open_interest_usd,
+        open_interest_change_15m_pct=snapshot.open_interest_change_15m_pct,
+        open_interest_change_1h_pct=snapshot.open_interest_change_1h_pct,
+        taker_buy_sell_ratio_15m=snapshot.taker_buy_sell_ratio_15m,
+        long_short_account_ratio=snapshot.long_short_account_ratio,
+        leverage_risk=str(choice["derivatives"]["leverage_risk"]),
+        derivatives_reasons=tuple(choice["derivatives"]["reasons"]),
         price_change_pct_24h=round(snapshot.price_change_pct_24h, 2),
         quote_volume_24h=round(snapshot.quote_volume_24h, 2),
         expires_at=expiry.isoformat(),

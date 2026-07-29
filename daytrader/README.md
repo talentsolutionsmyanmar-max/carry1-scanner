@@ -32,18 +32,30 @@ Run the tests:
 python3 -m unittest discover -s daytrader/tests -v
 ```
 
-## Signal gate
+## Ticket states and signal gate
 
-A directional signal requires all of:
+Every coherent candidate is shown as a complete plan: side, entry trigger,
+structural stop, TP1/TP2/TP3, risk-sized quantity, cost estimate, expiry, time
+exit, evidence, unresolved gates, and invalidation. The state controls whether
+that plan is actionable:
 
-1. Closed 15-minute candle aligned with EMA20 and EMA50.
-2. Closed 5-minute candle aligned with EMA9 and EMA21.
-3. A closed-candle 20-bar high/low breakout.
-4. RSI confirmation without a maximally stretched reading.
-5. Quote volume at least 1.2× the prior 20-bar median.
-6. Spread and ATR inside configured liquidity/volatility limits.
-7. The modeled 2R move at least 3× modeled round-trip friction.
-8. A score of at least 75/100.
+- `LIVE`: every confluence, trigger, session, execution, and risk gate cleared;
+- `ARMED`: conditional stop-entry plan; do not enter before its displayed trigger;
+- `WATCH`: directional context exists but no actionable ticket;
+- `STAND DOWN`: no coherent edge.
+
+A `LIVE` ticket requires all of:
+
+1. Closed 1-hour EMA50/EMA200 regime alignment.
+2. Closed 15-minute EMA20/EMA50 trend alignment.
+3. Closed 5-minute EMA9/EMA21 alignment and 20-bar breakout.
+4. MACD(12,26,9), RSI(14), Stoch RSI, and ADX(14) confirmation.
+5. Price on the correct side of session VWAP; Bollinger position is reported.
+6. Quote volume at least 1.2× the prior 20-bar median.
+7. Spread, ATR, mark drift, and structural-stop width inside configured limits.
+8. Modeled round-trip friction below 25% of the stop distance.
+9. Asia, London, or New York UTC kill zone.
+10. Confluence score of at least 80/100.
 
 The last, still-forming candle is discarded. Missing or invalid market data
 fails closed.
@@ -60,7 +72,8 @@ Defaults:
 - four new trades per UTC day;
 - a 30-minute same-symbol cooldown after exit;
 - notional capped at 50% of paper equity per trade;
-- stop at 1.25 ATR, target ladder at true 1R/2R/3R after modeled costs;
+- structural swing stop with a 1.25 ATR minimum, target ladder at true
+  1R/2R/3R after modeled costs;
 - all paper positions close at 2R, after three hours, or on UTC-day rollover;
 - configurable fees and slippage are charged to every completed paper trade.
 
@@ -93,4 +106,6 @@ strategy over out-of-sample data and a long forward paper period before
 considering any separate execution system.
 
 The initial in-sample diagnostic is published in
-[`RESEARCH.md`](RESEARCH.md). It failed; live execution must remain disabled.
+[`RESEARCH.md`](RESEARCH.md). It failed. This multi-indicator V2 is a new,
+unvalidated hypothesis; it does not erase that result, and live execution must
+remain disabled.

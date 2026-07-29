@@ -40,7 +40,7 @@ class Scanner:
         self.state = {
             "app": "CARRY-DAY",
             "mode": "PAPER_ONLY",
-            "research_status": "FAILED_INITIAL_GATE",
+            "research_status": "UNVALIDATED_V2_AFTER_FAILED_V1",
             "status": "STARTING",
             "last_scan": None,
             "next_scan": None,
@@ -50,8 +50,8 @@ class Scanner:
             "paper": self.broker.snapshot(),
             "config": self.config.public_dict(),
             "method": (
-                "closed 5m breakout + volume + RSI, aligned with closed "
-                "15m EMA20/50 trend; cost and risk gates fail closed"
+                "closed 5m trigger + momentum/strength/volume/VWAP, aligned with "
+                "15m trend and 1h regime; friction, session, and risk gates fail closed"
             ),
         }
 
@@ -109,14 +109,14 @@ class Scanner:
         events = self.broker.update_prices(prices, started)
         signals.sort(
             key=lambda item: (
-                item["state"] not in {"LONG", "SHORT"},
+                {"LIVE": 0, "ARMED": 1, "WATCH": 2}.get(item["state"], 3),
                 -item["score"],
                 item["symbol"],
             )
         )
         if self.config.auto_paper:
             for signal in signals:
-                if signal["state"] not in {"LONG", "SHORT"} or not signal["ticket"]:
+                if signal["state"] != "LIVE" or not signal["ticket"]:
                     continue
                 opened, reason = self.broker.open_from_ticket(
                     signal["ticket"], now=started
@@ -126,7 +126,7 @@ class Scanner:
                         {
                             "symbol": signal["symbol"],
                             "event": "OPEN",
-                            "side": signal["state"],
+                            "side": signal["side"],
                         }
                     )
                 elif reason not in {"signal already processed", "symbol already open"}:
@@ -134,7 +134,7 @@ class Scanner:
 
         finished = datetime.now(timezone.utc)
         directional_count = sum(
-            item["state"] in {"LONG", "SHORT"} for item in signals
+            item["state"] == "LIVE" for item in signals
         )
         with self.lock:
             self.state.update(
@@ -253,7 +253,7 @@ def main() -> None:
     thread.start()
     print(
         f"CARRY-DAY paper scanner → http://{args.host}:{args.port}/ "
-        f"({config.primary_interval}/{config.trend_interval}, "
+        f"({config.primary_interval}/{config.trend_interval}/{config.higher_interval}, "
         f"risk {config.risk_per_trade_pct:.2f}%/trade)"
     )
     try:

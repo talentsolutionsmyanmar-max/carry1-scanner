@@ -76,10 +76,47 @@
       padding:3px 7px; border-radius:99px; font-size:9px; letter-spacing:.08em; color:var(--faint) }
     .state.long { color:var(--green); border-color:rgba(50,212,154,.35); background:rgba(50,212,154,.07) }
     .state.short { color:var(--red); border-color:rgba(255,101,122,.35); background:rgba(255,101,122,.07) }
+    .state.live { color:var(--green); border-color:rgba(50,212,154,.45); background:rgba(50,212,154,.09) }
+    .state.armed { color:var(--amber); border-color:rgba(247,191,85,.38); background:rgba(247,191,85,.07) }
     .state.watch { color:var(--amber); border-color:rgba(247,191,85,.28) }
     .bar { width:58px; height:4px; background:#1b2434; border-radius:4px; display:inline-block; overflow:hidden; vertical-align:middle }
     .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--cyan)) }
     .empty { padding:40px 20px; text-align:center; color:var(--faint) }
+
+    .tickets-panel { margin-top:18px }
+    .tickets { padding:14px; display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)) }
+    .ticket { border:1px solid var(--line); border-radius:14px; padding:16px;
+      background:linear-gradient(145deg,rgba(12,20,33,.96),rgba(7,12,21,.96)); position:relative; overflow:hidden }
+    .ticket:before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--amber) }
+    .ticket.live:before { background:var(--green); box-shadow:0 0 18px rgba(50,212,154,.45) }
+    .ticket-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px }
+    .ticket-symbol { margin-left:10px; font:750 17px var(--mono); color:#fff }
+    .ticket-side { margin-left:9px; font:700 11px var(--mono); letter-spacing:.08em }
+    .grade { text-align:right; color:var(--cyan); font:700 18px var(--mono); line-height:1 }
+    .grade b { color:var(--ink); margin-left:4px }
+    .grade small { display:block; color:var(--faint); font:8px var(--mono); letter-spacing:.12em; margin-top:4px }
+    .ticket-action { margin:13px 0; padding:10px 12px; border:1px solid rgba(61,217,235,.19); border-radius:9px;
+      background:rgba(61,217,235,.045); color:var(--cyan); font:700 11px/1.4 var(--mono) }
+    .levels { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border:1px solid var(--line); border-radius:10px; overflow:hidden }
+    .levels div { padding:9px 10px; border-left:1px solid var(--line); min-width:0 }
+    .levels div:first-child { border-left:0 }.levels .entry { background:rgba(61,217,235,.045) }.levels .stop { background:rgba(255,101,122,.035) }
+    .levels span { display:block; color:var(--faint); font:8px var(--mono); letter-spacing:.08em; white-space:nowrap }
+    .levels b { display:block; overflow:hidden; text-overflow:ellipsis; margin-top:3px; font:700 11px var(--mono) }
+    .levels .stop b { color:var(--red) }
+    .levels div:nth-child(n+3) b { color:var(--green) }
+    .indicator-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:1px; margin-top:10px;
+      background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden }
+    .indicator-grid span { padding:7px 8px; color:var(--faint); background:#0b121f; font:7px var(--mono); letter-spacing:.07em }
+    .indicator-grid b { display:block; color:var(--muted); font:600 9px var(--mono); margin-top:2px; letter-spacing:0; overflow:hidden; text-overflow:ellipsis }
+    .ticket-meta { display:grid; grid-template-columns:repeat(3,1fr); gap:7px 12px; margin:12px 0; color:var(--faint); font:8px var(--mono); letter-spacing:.07em }
+    .ticket-meta b { color:var(--muted); font-weight:600; margin-left:3px }
+    .evidence-list { display:flex; gap:5px; flex-wrap:wrap }
+    .evidence { border:1px solid var(--line); border-radius:99px; padding:3px 7px; color:var(--muted); font-size:8px }
+    .good-evidence { border-color:rgba(50,212,154,.17); color:#81cdb5 }
+    .block-evidence { border-color:rgba(247,191,85,.16); color:#b99b63 }
+    .invalidation { margin-top:11px; color:var(--faint); font-size:9px; line-height:1.45 }
+    .invalidation b { color:var(--red); letter-spacing:.08em; margin-right:4px }
+    .ticket-empty { grid-column:1/-1 }
 
     .stack { display:grid; gap:18px; align-content:start }
     .risk { padding:16px }
@@ -111,12 +148,16 @@
       .hero-copy { grid-column:1/-1 }
       .metric { border-left:0; border-top:1px solid var(--line); padding:12px 0 0 }
       .layout { grid-template-columns:1fr }
+      .tickets { grid-template-columns:1fr }
     }
     @media(max-width:650px) {
       .shell { width:min(100% - 20px,1420px); padding-top:16px }
       .tagline { display:none } .paper { display:none }
       .hero { grid-template-columns:1fr 1fr; padding:18px }
       .metric .v { font-size:17px }
+      .levels { grid-template-columns:repeat(2,1fr) }.levels div { border-top:1px solid var(--line) }
+      .indicator-grid { grid-template-columns:repeat(3,1fr) }
+      .ticket-meta { grid-template-columns:repeat(2,1fr) }
       .method { display:block }.method .formula { white-space:normal; margin-bottom:8px }
     }
   </style>
@@ -129,7 +170,7 @@
       <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">closed-candle intraday signal desk</div></div>
     </div>
     <div class="status"><i class="dot" id="dot"></i><span id="status">CONNECTING</span></div>
-    <div class="paper">PAPER ONLY · RESEARCH FAIL</div>
+    <div class="paper">PAPER ONLY · V2 UNVALIDATED</div>
   </header>
 
   <section class="hero">
@@ -144,13 +185,18 @@
     <div class="metric"><div class="k">Open risk</div><div class="v" id="positions">—</div><div class="s" id="positionCap">max —</div></div>
   </section>
 
+  <section class="panel tickets-panel">
+    <div class="panel-head"><h2>actionable trade tickets · complete execution plan</h2><div class="count" id="ticketCount">0 LIVE · 0 ARMED</div></div>
+    <div class="tickets" id="tickets"><div class="empty ticket-empty">building multi-timeframe tickets…</div></div>
+  </section>
+
   <div class="layout">
     <section class="panel">
       <div class="panel-head"><h2>liquid USDT perpetuals · signal board</h2><div class="count" id="scanTime">not scanned</div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SCORE</th><th>RSI</th><th>VOL ×</th><th>ATR %</th><th>SPREAD</th><th>24H</th></tr></thead>
-          <tbody id="signals"><tr><td colspan="8" class="empty">warming market data…</td></tr></tbody>
+          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SIDE</th><th>SCORE</th><th>RSI / ADX</th><th>VOL ×</th><th>COST/STOP</th><th>SPREAD</th><th>24H</th></tr></thead>
+          <tbody id="signals"><tr><td colspan="9" class="empty">warming market data…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -176,8 +222,8 @@
   </div>
 
   <section class="method">
-    <div class="formula">FIRE ⇔ 15m trend + 5m breakout + volume + RSI + friction gate</div>
-    <div><b>What this is:</b> an experimental scanner and persistent paper ledger. Signals use closed candles to avoid repainting, assume configurable fees and slippage, risk 0.25% of paper equity by default, and force a three-hour/UTC-day exit. It is not evidence of profitability and it cannot place a live order.</div>
+    <div class="formula">LIVE ⇔ 1h regime + 15m trend + 5m trigger + EMA + MACD + RSI/Stoch RSI + ADX + VWAP + Bollinger/ATR + volume + friction + kill zone</div>
+    <div><b>Ticket states:</b> LIVE cleared every gate; ARMED is a conditional stop-entry plan with unresolved gates shown; WATCH is analysis only; STAND DOWN means no trade. Targets are 1R/2R/3R after modeled fees, spread, and slippage. Risk defaults to 0.25% of paper equity. V2 is unvalidated research and never sends an exchange order.</div>
   </section>
 </main>
 <script src="static.js"></script>

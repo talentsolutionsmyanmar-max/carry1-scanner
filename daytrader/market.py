@@ -62,6 +62,7 @@ class MarketSnapshot:
     symbol: str
     primary: tuple[Candle, ...]
     trend: tuple[Candle, ...]
+    higher: tuple[Candle, ...]
     bid: float
     ask: float
     mark: float
@@ -169,6 +170,9 @@ class BinanceFuturesClient:
         trend = self.closed_klines(
             symbol, self.config.trend_interval, self.config.candle_limit
         )
+        higher = self.closed_klines(
+            symbol, self.config.higher_interval, self.config.candle_limit
+        )
         book = self._get("/fapi/v1/ticker/bookTicker", {"symbol": symbol})
         premium = self._get("/fapi/v1/premiumIndex", {"symbol": symbol})
         context = self.ticker_context.get(symbol, {})
@@ -176,6 +180,7 @@ class BinanceFuturesClient:
             symbol=symbol,
             primary=primary,
             trend=trend,
+            higher=higher,
             bid=float(book.get("bidPrice") or 0.0),
             ask=float(book.get("askPrice") or 0.0),
             mark=float(premium.get("markPrice") or 0.0),

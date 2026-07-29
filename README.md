@@ -8,9 +8,11 @@
 [`https://talentsolutionsmyanmar-max.github.io/carry1-scanner/`](https://talentsolutionsmyanmar-max.github.io/carry1-scanner/)
 
 The repo now also contains a separate, self-contained day-trading scanner in
-[`daytrader/`](daytrader/README.md). It uses closed 5-minute and 15-minute
-candles, liquidity and modeled-cost gates, fixed fractional risk sizing, daily
-loss/trade limits, and a persistent **paper-only** ledger.
+[`daytrader/`](daytrader/README.md). It combines closed 5-minute triggers,
+15-minute trends, and 1-hour regimes with EMA, MACD, RSI/Stoch RSI, ADX, VWAP,
+Bollinger/ATR, volume, session, liquidity, and modeled-cost gates. Every
+qualified candidate has a full entry/SL/TP1/TP2/TP3 ticket, fixed fractional
+risk sizing, and a persistent **paper-only** ledger.
 
 On GitHub Pages it runs entirely in the browser, reads Binance public market
 data directly, and stores the paper ledger only in that browser's local

@@ -128,7 +128,10 @@ function render(s) {
   const history = paper.history || [];
   const live = signals.filter(item => item.state === 'LIVE');
   const armed = signals.filter(item => item.state === 'ARMED');
-  const tickets = signals.filter(item => item.ticket).slice(0, 4);
+  // Signals arrive ranked LIVE → ARMED → WATCH, then by confluence score.
+  // Keep the desk decisive: one strongest actionable plan, never a menu of trades.
+  const tickets = signals.filter(item => item.ticket).slice(0, 1);
+  const strongest = tickets[0] || null;
   $('status').textContent = s.status || 'UNKNOWN';
   $('dot').className = 'dot ' + (s.status === 'LIVE' ? 'live' : '');
   $('equity').textContent = money(paper.equity_usd);
@@ -143,7 +146,9 @@ function render(s) {
   $('scanTime').textContent = `${relative(s.last_scan)} · ${s.scan_duration_seconds || 0}s sweep`;
   $('signals').innerHTML = signals.length ? signals.map(signalRow).join('') :
     '<tr><td colspan="9" class="empty">No market snapshots available</td></tr>';
-  $('ticketCount').textContent = `${live.length} LIVE · ${armed.length} ARMED`;
+  $('ticketCount').textContent = strongest ?
+    `STRONGEST · ${strongest.symbol} · ${strongest.state} · ${strongest.score}` :
+    'NO ACTIONABLE TICKET';
   $('tickets').innerHTML = tickets.length ? tickets.map(ticketCard).join('') :
     '<div class="empty ticket-empty">No candidate currently has enough coherent confluence for an actionable ticket. Stand down is a valid signal.</div>';
   $('openCount').textContent = String(positions.length);
@@ -163,11 +168,11 @@ function render(s) {
     $('hero').innerHTML = 'SESSION <em class="bad">LOCKED</em>';
     $('heroSub').textContent = (risk.blocked_by || []).join(' · ');
   } else if (live.length) {
-    $('hero').innerHTML = `${live.length} <em>LIVE</em> · ${armed.length} ARMED`;
-    $('heroSub').textContent = 'LIVE cleared every indicator, trigger, kill-zone, execution-cost, and risk gate. Paper simulation only.';
+    $('hero').innerHTML = 'STRONGEST SETUP <em>LIVE</em>';
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100. Every indicator, trigger, kill-zone, execution-cost, and risk gate cleared. Paper simulation only.`;
   } else if (armed.length) {
-    $('hero').innerHTML = `${armed.length} SETUP${armed.length === 1 ? '' : 'S'} <em class="amber">ARMED</em>`;
-    $('heroSub').textContent = 'Conditional entry plans are ready below. Do not enter before their trigger; unresolved gates remain visible.';
+    $('hero').innerHTML = 'STRONGEST SETUP <em class="amber">ARMED</em>';
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100. Do not enter before the displayed trigger; every unresolved gate remains visible.`;
   } else {
     $('hero').innerHTML = 'STAND <em>DOWN</em>';
     $('heroSub').textContent = 'No setup currently has coherent multi-timeframe confluence. Waiting is the trade.';

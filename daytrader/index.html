@@ -84,7 +84,7 @@
     .empty { padding:40px 20px; text-align:center; color:var(--faint) }
 
     .tickets-panel { margin-top:18px }
-    .tickets { padding:14px; display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)) }
+    .tickets { padding:14px; display:grid; gap:12px; grid-template-columns:minmax(0,1fr) }
     .ticket { border:1px solid var(--line); border-radius:14px; padding:16px;
       background:linear-gradient(145deg,rgba(12,20,33,.96),rgba(7,12,21,.96)); position:relative; overflow:hidden }
     .ticket:before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--amber) }
@@ -186,7 +186,7 @@
   </section>
 
   <section class="panel tickets-panel">
-    <div class="panel-head"><h2>actionable trade tickets · complete execution plan</h2><div class="count" id="ticketCount">0 LIVE · 0 ARMED</div></div>
+    <div class="panel-head"><h2>strongest setup · one decision, complete execution plan</h2><div class="count" id="ticketCount">NO ACTIONABLE TICKET</div></div>
     <div class="tickets" id="tickets"><div class="empty ticket-empty">building multi-timeframe tickets…</div></div>
   </section>
 

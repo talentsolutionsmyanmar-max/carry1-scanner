@@ -9,6 +9,25 @@ Live static version:
 The GitHub Pages build runs directly in the browser and persists its paper
 ledger in `localStorage`. It does not require the Python server or an API key.
 
+## Derivatives context
+
+Each symbol also reads Binance's public 5-minute derivatives feeds and reports:
+
+- open-interest value plus 15-minute and one-hour change;
+- aggregated 15-minute taker buy/sell volume ratio;
+- global long/short account ratio and current funding;
+- a transparent `SUPPORTS`, `NEUTRAL`, `CONFLICTS`, or `UNAVAILABLE` verdict;
+- a leverage-risk label such as `LONGS_CROWDED`, `SHORTS_CROWDED`,
+  `LEVERAGE_BUILDING`, or `DELEVERAGING`.
+
+This is deliberately not presented as CoinGlass data or as a liquidation
+heatmap. CoinGlass's liquidation-map model requires a paid API key, which must
+never be embedded in a public GitHub Pages bundle. The browser instead uses
+auditable exchange-native positioning proxies. These inputs add no points to
+the technical confluence score. Two independent conflicts veto `LIVE` and
+`ARMED`; missing auxiliary feeds remain visible as `UNAVAILABLE` and do not
+silently invent a value.
+
 ## Run
 
 ```bash
@@ -57,7 +76,8 @@ A `LIVE` ticket requires all of:
 7. Spread, ATR, mark drift, and structural-stop width inside configured limits.
 8. Modeled round-trip friction below 25% of the stop distance.
 9. Asia, London, or New York UTC kill zone.
-10. Confluence score of at least 80/100.
+10. No two-factor conflict from OI, taker flow, funding, and account crowding.
+11. Confluence score of at least 80/100.
 
 The last, still-forming candle is discarded. Missing or invalid market data
 fails closed.

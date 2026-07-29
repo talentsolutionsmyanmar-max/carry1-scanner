@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23101827'/%3E%3Cpath d='M18 42 42 18m-14 0h14v14' fill='none' stroke='%233dd9eb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>CARRY-DAY · Intraday paper desk</title>
+  <style>
+    :root {
+      --ink:#eef4ff; --muted:#7e8da8; --faint:#48556d; --line:#202b3f;
+      --panel:#101827; --panel2:#0b111d; --bg:#070b12;
+      --cyan:#3dd9eb; --blue:#6b8cff; --green:#32d49a; --red:#ff657a; --amber:#f7bf55;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+    }
+    * { box-sizing:border-box }
+    body {
+      margin:0; min-height:100vh; color:var(--ink);
+      font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
+      background:
+        radial-gradient(900px 450px at 15% -8%,rgba(61,217,235,.12),transparent 60%),
+        radial-gradient(850px 500px at 90% 5%,rgba(107,140,255,.11),transparent 58%),
+        var(--bg);
+    }
+    body:before {
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.24;
+      background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+      background-size:38px 38px;
+    }
+    .shell { width:min(1420px,calc(100% - 32px)); margin:auto; padding:26px 0 56px; position:relative }
+    header { display:flex; align-items:center; gap:18px; margin-bottom:20px }
+    .brand { display:flex; align-items:center; gap:12px }
+    .mark { width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+      background:linear-gradient(145deg,rgba(61,217,235,.2),rgba(107,140,255,.2));
+      border:1px solid rgba(61,217,235,.4); box-shadow:0 0 28px rgba(61,217,235,.12) }
+    .mark:after { content:"↗"; color:var(--cyan); font:700 22px var(--mono) }
+    h1 { margin:0; font-size:17px; letter-spacing:.15em }
+    h1 span { color:var(--cyan) }
+    .tagline { color:var(--muted); font-size:11px; letter-spacing:.08em }
+    .status { margin-left:auto; display:flex; align-items:center; gap:9px; color:var(--muted); font:12px var(--mono) }
+    .dot { width:8px; height:8px; border-radius:50%; background:var(--amber); box-shadow:0 0 12px currentColor }
+    .dot.live { background:var(--green) }
+    .paper { padding:6px 10px; border:1px solid rgba(247,191,85,.35); border-radius:99px;
+      color:var(--amber); font:10px var(--mono); letter-spacing:.12em }
+
+    .hero { border:1px solid var(--line); border-radius:20px; padding:24px;
+      background:linear-gradient(135deg,rgba(16,24,39,.95),rgba(10,16,27,.95));
+      display:grid; grid-template-columns:1.35fr repeat(4,minmax(115px,.45fr)); gap:15px; align-items:center }
+    .hero-kicker { color:var(--muted); font-size:10px; letter-spacing:.19em; text-transform:uppercase }
+    .hero-state { font-size:clamp(25px,3.2vw,43px); font-weight:750; letter-spacing:-.035em; margin:3px 0 }
+    .hero-state em { color:var(--cyan); font-style:normal }
+    .hero-sub { color:var(--muted); max-width:570px; font-size:12px }
+    .metric { border-left:1px solid var(--line); padding-left:15px }
+    .metric .k { color:var(--faint); font-size:9px; letter-spacing:.16em; text-transform:uppercase }
+    .metric .v { font:600 21px var(--mono); margin-top:4px }
+    .metric .s { color:var(--muted); font-size:10px }
+    .good { color:var(--green)!important } .bad { color:var(--red)!important }
+    .amber { color:var(--amber)!important } .cyan { color:var(--cyan)!important }
+
+    .layout { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(310px,.65fr); gap:18px; margin-top:18px }
+    .panel { border:1px solid var(--line); border-radius:16px; background:rgba(13,20,33,.9); overflow:hidden }
+    .panel-head { min-height:54px; padding:14px 17px; display:flex; align-items:center; gap:10px;
+      border-bottom:1px solid var(--line) }
+    .panel-head h2 { margin:0; font-size:10px; letter-spacing:.2em; color:var(--muted); text-transform:uppercase }
+    .panel-head .count { margin-left:auto; color:var(--faint); font:10px var(--mono) }
+    .table-wrap { overflow:auto }
+    table { width:100%; border-collapse:collapse; font:12px var(--mono); white-space:nowrap }
+    th { text-align:right; color:var(--faint); font-size:9px; letter-spacing:.11em; font-weight:500;
+      padding:10px 13px; background:rgba(7,11,18,.45) }
+    th:first-child,td:first-child { text-align:left }
+    td { text-align:right; padding:11px 13px; border-top:1px solid rgba(32,43,63,.58) }
+    tr:hover td { background:rgba(61,217,235,.025) }
+    .symbol { font-weight:700; color:#fff }
+    .state { display:inline-flex; min-width:55px; justify-content:center; border:1px solid var(--line);
+      padding:3px 7px; border-radius:99px; font-size:9px; letter-spacing:.08em; color:var(--faint) }
+    .state.long { color:var(--green); border-color:rgba(50,212,154,.35); background:rgba(50,212,154,.07) }
+    .state.short { color:var(--red); border-color:rgba(255,101,122,.35); background:rgba(255,101,122,.07) }
+    .state.watch { color:var(--amber); border-color:rgba(247,191,85,.28) }
+    .bar { width:58px; height:4px; background:#1b2434; border-radius:4px; display:inline-block; overflow:hidden; vertical-align:middle }
+    .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--cyan)) }
+    .empty { padding:40px 20px; text-align:center; color:var(--faint) }
+
+    .stack { display:grid; gap:18px; align-content:start }
+    .risk { padding:16px }
+    .risk-line { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; color:var(--muted); font-size:11px }
+    .risk-line b { color:var(--ink); font:12px var(--mono) }
+    .risk-meter { height:6px; border-radius:6px; background:#1a2434; overflow:hidden; margin-bottom:15px }
+    .risk-meter i { display:block; height:100%; background:linear-gradient(90deg,var(--green),var(--amber)); width:0 }
+    .risk-note { padding:10px 11px; border-radius:9px; border:1px solid rgba(61,217,235,.15);
+      color:var(--muted); background:rgba(61,217,235,.04); font-size:11px }
+    .position { padding:14px 16px; border-top:1px solid var(--line) }
+    .pos-head { display:flex; align-items:center; gap:8px }
+    .pos-head b { font:700 14px var(--mono) }
+    .pos-head .pnl { margin-left:auto; font:700 14px var(--mono) }
+    .pos-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:10px }
+    .pos-grid div { color:var(--faint); font-size:9px; text-transform:uppercase; letter-spacing:.1em }
+    .pos-grid b { display:block; color:var(--muted); font:11px var(--mono); margin-top:2px; text-transform:none; letter-spacing:0 }
+    .history { max-height:310px; overflow:auto }
+    .trade { display:grid; grid-template-columns:1fr auto; gap:5px; padding:11px 16px; border-top:1px solid var(--line) }
+    .trade b { font:11px var(--mono) }
+    .trade span { color:var(--faint); font-size:10px }
+    .trade .pnl { grid-row:1/3; grid-column:2; align-self:center; font:700 12px var(--mono) }
+
+    .method { margin-top:18px; padding:17px 20px; border:1px solid var(--line); border-radius:14px;
+      color:var(--muted); font-size:11px; display:flex; gap:18px; align-items:flex-start }
+    .method b { color:var(--ink) }
+    .method .formula { color:var(--cyan); font:11px var(--mono); white-space:nowrap }
+    @media(max-width:1050px) {
+      .hero { grid-template-columns:1fr 1fr 1fr }
+      .hero-copy { grid-column:1/-1 }
+      .metric { border-left:0; border-top:1px solid var(--line); padding:12px 0 0 }
+      .layout { grid-template-columns:1fr }
+    }
+    @media(max-width:650px) {
+      .shell { width:min(100% - 20px,1420px); padding-top:16px }
+      .tagline { display:none } .paper { display:none }
+      .hero { grid-template-columns:1fr 1fr; padding:18px }
+      .metric .v { font-size:17px }
+      .method { display:block }.method .formula { white-space:normal; margin-bottom:8px }
+    }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header>
+    <div class="brand">
+      <div class="mark"></div>
+      <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">closed-candle intraday signal desk</div></div>
+    </div>
+    <div class="status"><i class="dot" id="dot"></i><span id="status">CONNECTING</span></div>
+    <div class="paper">PAPER ONLY · RESEARCH FAIL</div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="hero-kicker">risk state · fail-closed</div>
+      <div class="hero-state" id="hero">WARMING <em>SCANNER</em></div>
+      <div class="hero-sub" id="heroSub">Waiting for the first closed-candle scan. No exchange credentials are used.</div>
+    </div>
+    <div class="metric"><div class="k">Paper equity</div><div class="v" id="equity">—</div><div class="s" id="cash">cash —</div></div>
+    <div class="metric"><div class="k">Daily P&amp;L</div><div class="v" id="dailyPnl">—</div><div class="s" id="lossLimit">limit —</div></div>
+    <div class="metric"><div class="k">Trades / cap</div><div class="v" id="trades">—</div><div class="s">UTC session</div></div>
+    <div class="metric"><div class="k">Open risk</div><div class="v" id="positions">—</div><div class="s" id="positionCap">max —</div></div>
+  </section>
+
+  <div class="layout">
+    <section class="panel">
+      <div class="panel-head"><h2>liquid USDT perpetuals · signal board</h2><div class="count" id="scanTime">not scanned</div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SCORE</th><th>RSI</th><th>VOL ×</th><th>ATR %</th><th>SPREAD</th><th>24H</th></tr></thead>
+          <tbody id="signals"><tr><td colspan="8" class="empty">warming market data…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="stack">
+      <section class="panel">
+        <div class="panel-head"><h2>session governor</h2><div class="count" id="riskState">CHECKING</div></div>
+        <div class="risk">
+          <div class="risk-line"><span>Daily loss consumed</span><b id="riskUsed">0%</b></div>
+          <div class="risk-meter"><i id="riskBar"></i></div>
+          <div class="risk-note" id="riskNote">The governor blocks new paper entries when any hard limit is reached.</div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>open paper positions</h2><div class="count" id="openCount">0</div></div>
+        <div id="openPositions"><div class="empty">No open positions</div></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>paper trade log</h2><div class="count">NET OF MODELED COST</div></div>
+        <div class="history" id="history"><div class="empty">No completed trades</div></div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="method">
+    <div class="formula">FIRE ⇔ 15m trend + 5m breakout + volume + RSI + friction gate</div>
+    <div><b>What this is:</b> an experimental scanner and persistent paper ledger. Signals use closed candles to avoid repainting, assume configurable fees and slippage, risk 0.25% of paper equity by default, and force a three-hour/UTC-day exit. It is not evidence of profitability and it cannot place a live order.</div>
+  </section>
+</main>
+<script src="static.js"></script>
+</body>
+</html>

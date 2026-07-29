@@ -1,3 +1,7 @@
 depth_history/
 .depth_state.json
 __pycache__/
+*.py[cod]
+daytrader/.paper_state.json
+daytrader/.paper_state.tmp
+daytrader/backtest-results/

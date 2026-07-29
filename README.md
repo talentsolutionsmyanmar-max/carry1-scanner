@@ -2,6 +2,30 @@
 
 **Live dashboard (no install):** open `web/index.html` via any static host — it talks to Binance directly from your browser.
 
+## New: CARRY-DAY intraday paper desk
+
+**Live GitHub Pages:**
+[`https://talentsolutionsmyanmar-max.github.io/carry1-scanner/`](https://talentsolutionsmyanmar-max.github.io/carry1-scanner/)
+
+The repo now also contains a separate, self-contained day-trading scanner in
+[`daytrader/`](daytrader/README.md). It uses closed 5-minute and 15-minute
+candles, liquidity and modeled-cost gates, fixed fractional risk sizing, daily
+loss/trade limits, and a persistent **paper-only** ledger.
+
+On GitHub Pages it runs entirely in the browser, reads Binance public market
+data directly, and stores the paper ledger only in that browser's local
+storage. No Python server or API key is required.
+
+```bash
+cd daytrader
+python3 server.py              # → http://127.0.0.1:7200
+```
+
+The new application does not rename or override CARRY-1's negative research
+result, and it contains no live-order path. Its own initial 30-day diagnostic
+also failed, so it ships strictly as a scanner, paper ledger, and research
+harness—not as a profitability claim.
+
 - jsDelivr (always current `main`):
   `https://cdn.jsdelivr.net/gh/talentsolutionsmyanmar-max/carry1-scanner@main/web/index.html`
 - Local full version (live persistence rebuild + shared alert log):
@@ -52,6 +76,7 @@ inequality actually clears with margin, and stays silent otherwise.
 web/index.html      standalone dashboard — browser ↔ Binance direct (CORS-open)
 web/persist.json    persistence table (median/p75 gross carry per name/theta)
 carrydash/          local server build (server.py, watchdog.py, richer UI)
+daytrader/          intraday closed-candle scanner + risk-governed paper ledger
 carry_stage0.py     Stage-0 measurement: conditional carry vs venue costs
 carry_stage1.py     Stage-1 controls: 2y regime attempt + measured book costs
 carry_stage0.json / carry_stage1.json   the data behind the gate decision

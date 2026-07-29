@@ -34,10 +34,12 @@ python3 -m unittest discover -s daytrader/tests -v
 
 ## Ticket states and signal gate
 
-Every coherent candidate is shown as a complete plan: side, entry trigger,
-structural stop, TP1/TP2/TP3, risk-sized quantity, cost estimate, expiry, time
-exit, evidence, unresolved gates, and invalidation. The state controls whether
-that plan is actionable:
+The dashboard shows exactly one complete plan: the strongest `LIVE` ticket, or
+the highest-scoring `ARMED` ticket when no setup is live. The remaining markets
+stay visible in the comparison board without competing ticket cards. The plan
+includes side, entry trigger, structural stop, TP1/TP2/TP3, risk-sized quantity,
+cost estimate, expiry, time exit, evidence, unresolved gates, and invalidation.
+The state controls whether that plan is actionable:
 
 - `LIVE`: every confluence, trigger, session, execution, and risk gate cleared;
 - `ARMED`: conditional stop-entry plan; do not enter before its displayed trigger;

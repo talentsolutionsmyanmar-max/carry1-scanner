@@ -32,6 +32,10 @@ const CFG = Object.freeze({
   minAtrPct: 0.12, maxAtrPct: 3, maxEntryDriftAtr: 0.5,
   stopAtr: 1.25, maxStopAtr: 4, maxFrictionStopPct: 25, minAdx: 18,
   minRewardCostMultiple: 3, entryExpiryMinutes: 20,
+  liquiditySweepLookback: 8, swingLeftBars: 2, swingRightBars: 2,
+  sweepBufferAtr: 0.03, mssBufferAtr: 0.02, displacementBodyRatio: 1.20,
+  fvgMinAtr: 0.08, fvgEntryMaxDistanceAtr: 0.75,
+  liquiditySignalScore: 85, liquidityArmedScore: 80, liquidityStopMinAtr: 0.75,
   startingEquity: 10000, riskPerTrade: 0.0025, maxDailyLoss: 0.01,
   maxPositions: 2, maxTrades: 4, maxNotional: 0.5,
   maxHoldMinutes: 180, cooldownMinutes: 30,
@@ -52,9 +56,11 @@ function signalRow(s) {
   const state = s.state || 'STAND_DOWN';
   const change = Number(s.price_change_pct_24h || 0);
   const verdict = String(s.derivatives_verdict || 'UNAVAILABLE');
+  const playbook = s.playbook === 'LIQUIDITY_MSS_FVG' ? 'B · LIQ/MSS' : 'A · MOMENTUM';
   return `<tr>
     <td><span class="symbol">${esc(s.symbol)}</span></td>
     <td><span class="state ${state.toLowerCase()}">${esc(state.replace('_', ' '))}</span></td>
+    <td><span class="playbook-mini ${s.playbook === 'LIQUIDITY_MSS_FVG' ? 'liquidity' : ''}">${esc(playbook)}</span></td>
     <td class="${s.side === 'LONG' ? 'good' : s.side === 'SHORT' ? 'bad' : ''}">${esc(s.side || '—')}</td>
     <td><span class="bar"><i style="width:${Math.min(100, s.score || 0)}%"></i></span> ${s.score || 0}</td>
     <td>${num(s.rsi_5m, 1)} / ${num(s.adx_5m, 1)}</td>
@@ -63,6 +69,35 @@ function signalRow(s) {
     <td><span class="deriv-pill ${verdict.toLowerCase()}">${esc(verdict)}</span></td>
     <td class="${pnlClass(change)}">${change >= 0 ? '+' : ''}${num(change, 2)}%</td>
   </tr>`;
+}
+
+function playbookPanel(signal) {
+  const liquidity = signal.playbook === 'LIQUIDITY_MSS_FVG';
+  const confirmation = String(signal.playbook_confirmation || 'SINGLE').replaceAll('_', ' ');
+  const fields = liquidity ? [
+    ['LIQUIDITY', signal.liquidity_level_name || 'PENDING'],
+    ['LEVEL / SWEEP', `${price(signal.liquidity_level)} / ${price(signal.sweep_price)}`],
+    ['MSS LEVEL', price(signal.mss_level)],
+    ['DISPLACEMENT', signal.displacement_ratio == null ? '—' : `${num(signal.displacement_ratio, 2)}× body`],
+    ['FVG RANGE', signal.fvg_low == null ? 'PENDING' : `${price(signal.fvg_low)} – ${price(signal.fvg_high)}`],
+    ['50% ENTRY', price(signal.fvg_mid)],
+    ['DEALING RANGE', `${esc(signal.premium_discount || 'UNKNOWN')} · mid ${price(signal.dealing_range_mid)}`]
+  ] : [
+    ['TRIGGER', 'CLOSED 5M BREAKOUT'],
+    ['BREAKOUT LEVEL', price(signal.breakout_level)],
+    ['ENTRY LOGIC', signal.state === 'LIVE' ? 'MARK AFTER CLOSE' : 'STOP TRIGGER'],
+    ['HTF FILTER', `${esc(signal.higher_trend || 'MIXED')} / ${esc(signal.trend_15m || 'MIXED')}`],
+    ['MOMENTUM', `RSI ${num(signal.rsi_5m, 1)} · ADX ${num(signal.adx_5m, 1)}`],
+    ['VOLUME', `${num(signal.volume_ratio, 2)}× MEDIAN`],
+    ['SESSION', signal.kill_zone || '—']
+  ];
+  return `<section class="playbook-context ${liquidity ? 'liquidity' : ''}" aria-label="Selected strategy playbook evidence">
+    <div class="playbook-head">
+      <div><span class="playbook-kicker">${esc(signal.playbook_label || 'PLAYBOOK A · MOMENTUM')}</span><small>${liquidity ? 'SWEEP → MSS → DISPLACEMENT → FVG RETEST' : 'REGIME → TREND → MOMENTUM BREAKOUT'}</small></div>
+      <span class="playbook-confirmation">${esc(confirmation)}</span>
+    </div>
+    <div class="playbook-grid">${fields.map(([label, value]) => `<div><span>${esc(label)}</span><b>${value}</b></div>`).join('')}</div>
+  </section>`;
 }
 
 function derivativesPanel(signal) {
@@ -95,7 +130,7 @@ function ticketCard(signal) {
   const expiry = t.entry_valid_until ? new Date(t.entry_valid_until).toISOString().slice(11, 16) + ' UTC' : '—';
   return `<article class="ticket ${String(signal.state).toLowerCase()}">
     <div class="ticket-head">
-      <div><span class="state ${String(signal.state).toLowerCase()}">${esc(signal.state)}</span><span class="ticket-symbol">${esc(signal.symbol)}</span><span class="ticket-side ${sideClass}">${esc(signal.side)}</span></div>
+      <div><span class="state ${String(signal.state).toLowerCase()}">${esc(signal.state)}</span><span class="ticket-symbol">${esc(signal.symbol)}</span><span class="ticket-side ${sideClass}">${esc(signal.side)}</span><span class="playbook-mini ${signal.playbook === 'LIQUIDITY_MSS_FVG' ? 'liquidity' : ''}">${esc(signal.playbook === 'LIQUIDITY_MSS_FVG' ? 'B · LIQ/MSS' : 'A · MOMENTUM')}</span></div>
       <div class="grade">${esc(signal.confidence)} <b>${signal.score}</b><small>CONFLUENCE</small></div>
     </div>
     <div class="ticket-action">${esc(signal.action)}</div>
@@ -106,6 +141,7 @@ function ticketCard(signal) {
       <div><span>TP2 · NET 2R</span><b>${price(t.tp2)}</b></div>
       <div><span>TP3 · NET 3R</span><b>${price(t.tp3)}</b></div>
     </div>
+    ${playbookPanel(signal)}
     <div class="indicator-grid">
       <span>1H REGIME<b>${esc(signal.higher_trend)}</b></span>
       <span>15M TREND<b>${esc(signal.trend_15m)}</b></span>
@@ -175,9 +211,9 @@ function render(s) {
   $('positionCap').textContent = 'concurrent paper positions';
   $('scanTime').textContent = `${relative(s.last_scan)} · ${s.scan_duration_seconds || 0}s sweep`;
   $('signals').innerHTML = signals.length ? signals.map(signalRow).join('') :
-    '<tr><td colspan="10" class="empty">No market snapshots available</td></tr>';
+    '<tr><td colspan="11" class="empty">No market snapshots available</td></tr>';
   $('ticketCount').textContent = strongest ?
-    `STRONGEST · ${strongest.symbol} · ${strongest.state} · ${strongest.score}` :
+    `STRONGEST · ${strongest.symbol} · ${strongest.playbook === 'LIQUIDITY_MSS_FVG' ? 'PLAYBOOK B' : 'PLAYBOOK A'} · ${strongest.state} · ${strongest.score}` :
     'NO ACTIONABLE TICKET';
   $('tickets').innerHTML = tickets.length ? tickets.map(ticketCard).join('') :
     '<div class="empty ticket-empty">No candidate currently has enough coherent confluence for an actionable ticket. Stand down is a valid signal.</div>';
@@ -199,10 +235,10 @@ function render(s) {
     $('heroSub').textContent = (risk.blocked_by || []).join(' · ');
   } else if (live.length) {
     $('hero').innerHTML = 'STRONGEST SETUP <em>LIVE</em>';
-    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Every trigger, execution-cost, context, and risk gate cleared. Paper simulation only.`;
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.playbook_label} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Every trigger, execution-cost, context, and risk gate cleared. Paper simulation only.`;
   } else if (armed.length) {
     $('hero').innerHTML = 'STRONGEST SETUP <em class="amber">ARMED</em>';
-    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Do not enter before the displayed trigger; every unresolved gate remains visible.`;
+    $('heroSub').textContent = `${strongest.symbol} ${strongest.side} · ${strongest.playbook_label} · ${strongest.score}/100 · derivatives ${String(strongest.derivatives_verdict || 'unavailable').toLowerCase()}. Do not enter before the displayed trigger; every unresolved gate remains visible.`;
   } else {
     $('hero').innerHTML = 'STAND <em>DOWN</em>';
     $('heroSub').textContent = 'No setup currently has coherent multi-timeframe confluence. Waiting is the trade.';
@@ -320,6 +356,124 @@ function killZone(date) {
   if (hour >= 8 && hour < 12) return 'LONDON';
   if (hour >= 12 && hour < 16) return 'NEW_YORK';
   return 'OFF_HOURS';
+}
+
+function confirmedSwings(bars, left = 2, right = 2) {
+  const highs = [], lows = [];
+  if (left < 1 || right < 1) throw new Error('swing confirmation needs bars on both sides');
+  for (let index = left; index < bars.length - right; index++) {
+    const bar = bars[index], neighbors = [
+      ...bars.slice(index - left, index), ...bars.slice(index + 1, index + right + 1)
+    ];
+    if (neighbors.every(item => bar.high > item.high)) highs.push({
+      index, confirmationIndex: index + right, price: bar.high, time: bar.closeTime
+    });
+    if (neighbors.every(item => bar.low < item.low)) lows.push({
+      index, confirmationIndex: index + right, price: bar.low, time: bar.closeTime
+    });
+  }
+  return {highs, lows};
+}
+
+function findFairValueGaps(bars, side, startIndex, atrValue, minGapAtr = 0.08) {
+  const gaps = [], minimum = Math.max(0, atrValue * minGapAtr);
+  for (let index = Math.max(2, startIndex); index < bars.length; index++) {
+    const first = bars[index - 2], third = bars[index];
+    const low = side === 'LONG' ? first.high : third.high;
+    const high = side === 'LONG' ? third.low : first.low;
+    if (high - low < minimum) continue;
+    const mid = (low + high) / 2, later = bars.slice(index + 1);
+    const fullyFilled = side === 'LONG' ? later.some(bar => bar.low <= low) : later.some(bar => bar.high >= high);
+    let retestIndex = null;
+    for (let offset = 0; offset < later.length; offset++) {
+      const bar = later[offset];
+      const touched = side === 'LONG' ? bar.low <= mid && bar.close > low : bar.high >= mid && bar.close < high;
+      if (touched) { retestIndex = index + 1 + offset; break; }
+    }
+    if (!fullyFilled) gaps.push({index, low, high, mid, retestIndex, sizeAtr: (high - low) / Math.max(atrValue, 1e-12)});
+  }
+  return gaps;
+}
+
+function sessionLevels(primary, asOfMs, side) {
+  const available = primary.filter(bar => bar.closeTime < asOfMs);
+  if (!available.length) return [];
+  const asOf = new Date(asOfMs), today = asOf.toISOString().slice(0, 10), levels = [];
+  const dates = [...new Set(available.map(bar => new Date(bar.openTime).toISOString().slice(0, 10)).filter(day => day < today))].sort();
+  if (dates.length) {
+    const prior = available.filter(bar => new Date(bar.openTime).toISOString().slice(0, 10) === dates.at(-1));
+    const value = side === 'LONG' ? Math.min(...prior.map(bar => bar.low)) : Math.max(...prior.map(bar => bar.high));
+    levels.push([side === 'LONG' ? 'PREVIOUS DAY LOW' : 'PREVIOUS DAY HIGH', value]);
+  }
+  if (asOf.getUTCHours() >= 4) {
+    const asia = available.filter(bar => {
+      const date = new Date(bar.openTime);
+      return date.toISOString().slice(0, 10) === today && date.getUTCHours() < 4;
+    });
+    if (asia.length) {
+      const value = side === 'LONG' ? Math.min(...asia.map(bar => bar.low)) : Math.max(...asia.map(bar => bar.high));
+      levels.push([side === 'LONG' ? 'ASIA LOW' : 'ASIA HIGH', value]);
+    }
+  }
+  return levels;
+}
+
+function liquiditySweeps(primary, trend, side, atrValue) {
+  const primarySwings = confirmedSwings(primary, CFG.swingLeftBars, CFG.swingRightBars);
+  const trendSwings = confirmedSwings(trend, CFG.swingLeftBars, CFG.swingRightBars);
+  const key = side === 'LONG' ? 'lows' : 'highs', found = [];
+  const start = Math.max(1, primary.length - CFG.liquiditySweepLookback), buffer = atrValue * CFG.sweepBufferAtr;
+  for (let index = start; index < primary.length; index++) {
+    const bar = primary[index], levels = [];
+    const primaryKnown = primarySwings[key].filter(pivot => pivot.confirmationIndex < index);
+    if (primaryKnown.length) levels.push([`5M SWING ${side === 'LONG' ? 'LOW' : 'HIGH'}`, primaryKnown.at(-1).price]);
+    const trendKnown = trendSwings[key].filter(pivot => trend[pivot.confirmationIndex].closeTime < bar.openTime);
+    if (trendKnown.length) levels.push([`15M SWING ${side === 'LONG' ? 'LOW' : 'HIGH'}`, trendKnown.at(-1).price]);
+    levels.push(...sessionLevels(primary, bar.openTime, side));
+    const swept = levels.filter(([, level]) => side === 'LONG' ?
+      bar.low <= level - buffer && bar.close > level && bar.open >= level - buffer :
+      bar.high >= level + buffer && bar.close < level && bar.open <= level + buffer
+    );
+    if (swept.length) {
+      swept.sort((a, b) => Math.abs(bar.close - a[1]) - Math.abs(bar.close - b[1]));
+      found.push({index, name: swept[0][0], level: swept[0][1], extreme: side === 'LONG' ? bar.low : bar.high});
+    }
+  }
+  return found;
+}
+
+function dealingRange(trend, asOfMs) {
+  const eligible = trend.filter(bar => bar.closeTime < asOfMs);
+  if (eligible.length < 8) return null;
+  const swings = confirmedSwings(eligible, CFG.swingLeftBars, CFG.swingRightBars);
+  let high, low;
+  if (swings.highs.length && swings.lows.length) {
+    high = swings.highs.at(-1).price; low = swings.lows.at(-1).price;
+  } else {
+    const window = eligible.slice(-20);
+    high = Math.max(...window.map(bar => bar.high)); low = Math.min(...window.map(bar => bar.low));
+  }
+  return high > low ? {low, high, mid: (low + high) / 2} : null;
+}
+
+function marketStructureShift(primary, side, sweepIndex, atrValue) {
+  const swings = confirmedSwings(primary, CFG.swingLeftBars, CFG.swingRightBars);
+  const key = side === 'LONG' ? 'highs' : 'lows';
+  const known = swings[key].filter(pivot => pivot.confirmationIndex < sweepIndex);
+  const context = primary.slice(Math.max(0, sweepIndex - 12), sweepIndex);
+  if (!known.length && !context.length) return null;
+  const level = known.length ? known.at(-1).price : side === 'LONG' ?
+    Math.max(...context.map(bar => bar.high)) : Math.min(...context.map(bar => bar.low));
+  const buffer = atrValue * CFG.mssBufferAtr;
+  for (let index = sweepIndex + 1; index < primary.length; index++) {
+    const bar = primary[index], bodies = primary.slice(Math.max(0, index - 20), index).map(item => Math.abs(item.close - item.open));
+    const bodyRatio = Math.abs(bar.close - bar.open) / Math.max(median(bodies), 1e-12);
+    const location = (bar.close - bar.low) / Math.max(bar.high - bar.low, 1e-12);
+    const breakOk = side === 'LONG' ? bar.close >= level + buffer : bar.close <= level - buffer;
+    const displacement = bodyRatio >= CFG.displacementBodyRatio && (side === 'LONG' ? location >= 0.70 : location <= 0.30);
+    if (breakOk && displacement) return {index, level, bodyRatio};
+  }
+  return null;
 }
 
 function derivativesContext(snapshot, side, priceChange15mPct) {
@@ -442,11 +596,15 @@ function makeTicket(signal, equity, now) {
     invalidation: signal.invalidation, quantity, notional_usd: notional,
     risk_budget_usd: riskBudget, effective_risk_usd: quantity * stopDistance + cost,
     estimated_round_trip_cost_usd: cost, friction_bp: signal.friction_bp,
-    friction_stop_pct: signal.friction_stop_pct, score: signal.score, confidence: signal.confidence
+    friction_stop_pct: signal.friction_stop_pct, score: signal.score, confidence: signal.confidence,
+    playbook: signal.playbook, playbook_confirmation: signal.playbook_confirmation,
+    target_basis: signal.playbook === 'LIQUIDITY_MSS_FVG' ?
+      'FVG retest entry; TP1/TP2/TP3 are minimum net 1R/2R/3R' :
+      'Breakout entry; TP1/TP2/TP3 are net 1R/2R/3R'
   };
 }
 
-function evaluate(snapshot, equity, now = new Date()) {
+function evaluateMomentum(snapshot, equity, now = new Date()) {
   const {primary, trend, higher} = snapshot;
   if (primary.length < 55 || trend.length < 55 || higher.length < 201) return {
     symbol: snapshot.symbol, state: 'INSUFFICIENT', side: null, score: 0,
@@ -551,7 +709,9 @@ function evaluate(snapshot, equity, now = new Date()) {
   if (zone === 'OFF_HOURS') choice.blocks.push('outside Asia/London/New York kill zone; LIVE disabled');
   const signal = {
     symbol: snapshot.symbol, state, side: choice.side, score: choice.score, action, confidence,
-    signal_id: `${snapshot.symbol}:${current.closeTime}:${choice.side}:${state}`,
+    playbook: 'MOMENTUM_BREAKOUT', playbook_label: 'PLAYBOOK A · MOMENTUM',
+    playbook_confirmation: 'SINGLE',
+    signal_id: `${snapshot.symbol}:${current.closeTime}:MOMENTUM_BREAKOUT:${choice.side}:${state}`,
     candle_close_time: current.closeTime, entry: choice.entry, entry_trigger: choice.trigger, stop: choice.stop,
     spread_bp: Number.isFinite(spreadBp) ? spreadBp : null, friction_bp: frictionBp,
     friction_stop_pct: choice.frictionStopPct, stop_distance_bp: choice.stopBp,
@@ -571,6 +731,172 @@ function evaluate(snapshot, equity, now = new Date()) {
   };
   if (['LIVE', 'ARMED'].includes(state)) signal.ticket = makeTicket(signal, equity, now);
   return signal;
+}
+
+function evaluateLiquidity(snapshot, equity, now = new Date()) {
+  const {primary, trend, higher} = snapshot;
+  if (primary.length < 55 || trend.length < 55 || higher.length < 201) return {
+    symbol: snapshot.symbol, state: 'INSUFFICIENT', side: null, score: 0,
+    action: 'WAIT — liquidity playbook warm-up', playbook: 'LIQUIDITY_MSS_FVG',
+    playbook_label: 'PLAYBOOK B · LIQUIDITY MSS/FVG', playbook_confirmation: 'SINGLE',
+    price_change_pct_24h: snapshot.change, quote_volume_24h: snapshot.quoteVolume,
+    blocked_by: ['Need 55×5m, 55×15m, and 201×1h closed candles']
+  };
+  const current = primary.at(-1), closes = primary.map(bar => bar.close);
+  const trendCloses = trend.map(bar => bar.close), higherCloses = higher.map(bar => bar.close);
+  const currentAtr = atrLast(primary), currentRsi = rsiLast(closes), currentStoch = stochRsiLast(closes);
+  const currentAdx = adxLast(primary), macd = macdLast(closes);
+  const higher50 = emaLast(higherCloses, 50), higher200 = emaLast(higherCloses, 200);
+  const trend20 = emaLast(trendCloses, 20), trend50 = emaLast(trendCloses, 50);
+  const vwap = sessionVwap(primary), bb = closes.slice(-20);
+  const bbMid = bb.reduce((sum, value) => sum + value, 0) / bb.length;
+  const bbStd = Math.sqrt(bb.reduce((sum, value) => sum + (value - bbMid) ** 2, 0) / bb.length);
+  const bbPosition = (current.close - bbMid) / Math.max(2 * bbStd, 1e-12);
+  const volumeBase = median(primary.slice(-CFG.volumeLookback - 1, -1).map(bar => bar.quoteVolume));
+  const volumeRatio = volumeBase > 0 ? current.quoteVolume / volumeBase : 0;
+  const midpoint = snapshot.bid > 0 && snapshot.ask > snapshot.bid ? (snapshot.bid + snapshot.ask) / 2 : current.close;
+  const spreadBp = snapshot.bid > 0 && snapshot.ask > snapshot.bid ? (snapshot.ask - snapshot.bid) / midpoint * 10000 : Infinity;
+  const mark = snapshot.mark > 0 ? snapshot.mark : current.close, atrPct = currentAtr / current.close * 100;
+  const frictionBp = 2 * (CFG.feePerSideBp + CFG.slippagePerSideBp) + (Number.isFinite(spreadBp) ? spreadBp : CFG.maxSpreadBp * 10);
+  const driftAtr = Math.abs(mark - current.close) / Math.max(currentAtr, 1e-12), zone = killZone(now);
+  const priceChange15mPct = primary.at(-4).close > 0 ? (current.close / primary.at(-4).close - 1) * 100 : 0;
+
+  function candidate(side) {
+    const direction = side === 'LONG' ? 1 : -1;
+    const htfBias = side === 'LONG' ? higherCloses.at(-1) > higher50 && higher50 > higher200 :
+      higherCloses.at(-1) < higher50 && higher50 < higher200;
+    const trendBias = side === 'LONG' ? trendCloses.at(-1) > trend20 && trend20 > trend50 :
+      trendCloses.at(-1) < trend20 && trend20 < trend50;
+    const derivatives = derivativesContext(snapshot, side, priceChange15mPct);
+    const sweeps = liquiditySweeps(primary, trend, side, currentAtr);
+    let selected = sweeps.length ? sweeps.at(-1) : null, selectedMss = null, selectedFvg = null;
+    for (let offset = sweeps.length - 1; offset >= 0; offset--) {
+      const sweep = sweeps[offset], mss = marketStructureShift(primary, side, sweep.index, currentAtr);
+      if (!mss) continue;
+      const gaps = findFairValueGaps(primary, side, mss.index, currentAtr, CFG.fvgMinAtr);
+      if (gaps.length) {
+        selected = sweep; selectedMss = mss;
+        const currentRetests = gaps.filter(gap => gap.retestIndex === primary.length - 1);
+        selectedFvg = (currentRetests.length ? currentRetests : gaps).at(-1);
+        break;
+      }
+      if (selected === sweep) selectedMss = mss;
+    }
+    const sweepOk = Boolean(selected), mssOk = Boolean(selectedMss), fvgOk = Boolean(selectedFvg && selectedMss);
+    const entry = selectedFvg ? selectedFvg.mid : current.close;
+    const range = dealingRange(trend, selected ? primary[selected.index].openTime : current.openTime);
+    const locationOk = range ? (side === 'LONG' ? entry <= range.mid : entry >= range.mid) : false;
+    const premiumDiscount = !range ? 'UNKNOWN' : entry < range.mid ? 'DISCOUNT' : entry > range.mid ? 'PREMIUM' : 'EQUILIBRIUM';
+    const sweepExtreme = selected ? selected.extreme : current.close - direction * currentAtr;
+    const stop = side === 'LONG' ?
+      Math.min(sweepExtreme - 0.1 * currentAtr, entry - CFG.liquidityStopMinAtr * currentAtr) :
+      Math.max(sweepExtreme + 0.1 * currentAtr, entry + CFG.liquidityStopMinAtr * currentAtr);
+    const stopDistance = Math.abs(entry - stop), stopAtr = stopDistance / Math.max(currentAtr, 1e-12);
+    const stopBp = stopDistance / Math.max(entry, 1e-12) * 10000;
+    const frictionStopPct = frictionBp / Math.max(stopBp, 1e-12) * 100;
+    const execution = spreadBp <= CFG.maxSpreadBp && atrPct >= CFG.minAtrPct && atrPct <= CFG.maxAtrPct &&
+      driftAtr <= CFG.maxEntryDriftAtr && stopAtr <= CFG.maxStopAtr && frictionStopPct <= CFG.maxFrictionStopPct &&
+      2 * stopBp >= CFG.minRewardCostMultiple * frictionBp;
+    const sequenceOk = mssOk && fvgOk;
+    const score = (htfBias ? 20 : 0) + (locationOk ? 15 : 0) + (sweepOk ? 20 : 0) +
+      (mssOk ? 20 : 0) + (sequenceOk ? 15 : 0) + (execution ? 10 : 0);
+    const derivativesClear = derivatives.verdict !== 'CONFLICTS';
+    const retestIndex = selectedFvg ? selectedFvg.retestIndex : null;
+    const currentRetest = retestIndex === primary.length - 1;
+    const pendingRetest = selectedFvg && retestIndex == null && Math.abs(mark - entry) <= CFG.fvgEntryMaxDistanceAtr * currentAtr;
+    const critical = htfBias && locationOk && sweepOk && mssOk && fvgOk && execution;
+    const live = score >= CFG.liquiditySignalScore && critical && currentRetest && derivativesClear && zone !== 'OFF_HOURS';
+    const armed = score >= CFG.liquidityArmedScore && critical && pendingRetest && derivativesClear;
+    const reasons = [], blocks = [];
+    (htfBias ? reasons : blocks).push(`1h EMA50/200 structure ${htfBias ? 'aligned' : 'not aligned'}`);
+    if (!range) blocks.push('15m dealing range unavailable');
+    else if (locationOk) reasons.push(`entry in ${premiumDiscount.toLowerCase()} half of 15m dealing range`);
+    else blocks.push(`entry is in ${premiumDiscount.toLowerCase()}, wrong side of range`);
+    if (selected) reasons.push(`${selected.name.toLowerCase()} swept and reclaimed on a closed 5m candle`);
+    else blocks.push('no closed 5m liquidity sweep in the last eight bars');
+    if (selectedMss) reasons.push(`MSS closed through ${price(selectedMss.level)} with ${selectedMss.bodyRatio.toFixed(2)}× displacement`);
+    else if (selected) blocks.push('post-sweep market structure shift with displacement is pending');
+    if (selectedFvg) reasons.push(`unfilled FVG ${price(selectedFvg.low)}–${price(selectedFvg.high)}`);
+    else if (selectedMss) blocks.push(`FVG at least ${CFG.fvgMinAtr.toFixed(2)} ATR is pending`);
+    if (execution) reasons.push(`friction ${frictionStopPct.toFixed(1)}% of structural stop`);
+    else {
+      if (spreadBp > CFG.maxSpreadBp) blocks.push(`spread ${spreadBp.toFixed(1)}bp above ${CFG.maxSpreadBp}bp`);
+      if (atrPct < CFG.minAtrPct || atrPct > CFG.maxAtrPct) blocks.push(`ATR ${atrPct.toFixed(2)}% outside volatility band`);
+      if (driftAtr > CFG.maxEntryDriftAtr) blocks.push(`mark drift ${driftAtr.toFixed(2)} ATR from signal close`);
+      if (stopAtr > CFG.maxStopAtr) blocks.push(`sweep stop ${stopAtr.toFixed(2)} ATR is too wide`);
+      if (frictionStopPct > CFG.maxFrictionStopPct) blocks.push(`friction consumes ${frictionStopPct.toFixed(1)}% of stop`);
+    }
+    if (selectedFvg && retestIndex != null && !currentRetest) blocks.push('FVG midpoint traded on an earlier candle; setup is consumed');
+    else if (selectedFvg && !currentRetest && !pendingRetest) blocks.push(`FVG midpoint is more than ${CFG.fvgEntryMaxDistanceAtr.toFixed(2)} ATR from mark`);
+    if (!derivativesClear) blocks.push('derivatives context conflicts on at least two independent factors');
+    if (zone === 'OFF_HOURS') blocks.push('outside Asia/London/New York kill zone; LIVE disabled');
+    return {side, score: Math.min(100, score), entry, stop, stopBp, frictionStopPct, higher: htfBias,
+      trend: trendBias, selected, mss: selectedMss, fvg: selectedFvg, rangeMid: range?.mid ?? null,
+      premiumDiscount, reasons, blocks, live, armed, derivatives};
+  }
+
+  const choice = [candidate('LONG'), candidate('SHORT')].sort((a, b) =>
+    (a.live ? 0 : a.armed ? 1 : 2) - (b.live ? 0 : b.armed ? 1 : 2) || b.score - a.score
+  )[0];
+  const state = choice.live ? 'LIVE' : choice.armed ? 'ARMED' : choice.score >= CFG.watchScore ? 'WATCH' : 'STAND_DOWN';
+  const expires = new Date(now.getTime() + CFG.entryExpiryMinutes * 60000);
+  const confidence = choice.score >= 90 ? 'A' : choice.score >= 80 ? 'A−' : choice.score >= 70 ? 'B' : 'C';
+  const action = state === 'LIVE' ? `ENTER ${choice.side} NOW — closed 5m FVG midpoint retest confirmed` :
+    state === 'ARMED' ? `${choice.side} LIMIT ${price(choice.entry)} — 50% FVG retest; cancel by ${expires.toISOString().slice(11, 16)} UTC` :
+    state === 'WATCH' ? `WAIT — ${choice.side.toLowerCase()} liquidity sequence incomplete or consumed` :
+    'STAND DOWN — no valid liquidity sweep/MSS/FVG sequence';
+  const selected = choice.selected, mss = choice.mss, fvg = choice.fvg;
+  const invalidationLevel = selected ? selected.extreme : choice.stop;
+  const invalidation = `Cancel before entry if 5m closes ${choice.side === 'LONG' ? 'below' : 'above'} ${price(invalidationLevel)}, the FVG fully fills, spread exceeds ${CFG.maxSpreadBp}bp, or the ticket expires. After entry, the hard stop is final.`;
+  const signal = {
+    symbol: snapshot.symbol, state, side: choice.side, score: choice.score, action, confidence,
+    playbook: 'LIQUIDITY_MSS_FVG', playbook_label: 'PLAYBOOK B · LIQUIDITY MSS/FVG', playbook_confirmation: 'SINGLE',
+    signal_id: `${snapshot.symbol}:${current.closeTime}:LIQUIDITY_MSS_FVG:${choice.side}:${state}`,
+    candle_close_time: current.closeTime, entry: choice.entry, entry_trigger: choice.entry, stop: choice.stop,
+    spread_bp: Number.isFinite(spreadBp) ? spreadBp : null, friction_bp: frictionBp,
+    friction_stop_pct: choice.frictionStopPct, stop_distance_bp: choice.stopBp,
+    atr: currentAtr, atr_pct: atrPct, rsi_5m: currentRsi, stoch_rsi_5m: currentStoch,
+    macd_hist_5m: macd.hist, adx_5m: currentAdx, vwap, bollinger_position: bbPosition,
+    volume_ratio: volumeRatio, breakout_level: mss?.level ?? null,
+    liquidity_level_name: selected?.name ?? null, liquidity_level: selected?.level ?? null,
+    sweep_price: selected?.extreme ?? null, mss_level: mss?.level ?? null,
+    displacement_ratio: mss?.bodyRatio ?? null, fvg_low: fvg?.low ?? null,
+    fvg_high: fvg?.high ?? null, fvg_mid: fvg?.mid ?? null,
+    dealing_range_mid: choice.rangeMid, premium_discount: choice.premiumDiscount,
+    higher_trend: choice.higher ? (choice.side === 'LONG' ? 'BULLISH' : 'BEARISH') : 'MIXED',
+    trend_15m: choice.trend ? (choice.side === 'LONG' ? 'BULLISH' : 'BEARISH') : 'MIXED',
+    kill_zone: zone, funding_bp: snapshot.fundingBp, price_change_pct_24h: snapshot.change,
+    derivatives_verdict: choice.derivatives.verdict, derivatives_available: choice.derivatives.available,
+    open_interest_usd: snapshot.openInterestUsd, open_interest_change_15m_pct: snapshot.oiChange15mPct,
+    open_interest_change_1h_pct: snapshot.oiChange1hPct,
+    taker_buy_sell_ratio_15m: snapshot.takerBuySellRatio15m,
+    long_short_account_ratio: snapshot.longShortAccountRatio,
+    leverage_risk: choice.derivatives.leverageRisk, derivatives_reasons: choice.derivatives.reasons,
+    quote_volume_24h: snapshot.quoteVolume, expires_at: expires.toISOString(), invalidation,
+    reasons: choice.reasons, blocked_by: choice.blocks, ticket: null
+  };
+  if (['LIVE', 'ARMED'].includes(state)) signal.ticket = makeTicket(signal, equity, now);
+  return signal;
+}
+
+function evaluate(snapshot, equity, now = new Date()) {
+  const momentum = evaluateMomentum(snapshot, equity, now), liquidity = evaluateLiquidity(snapshot, equity, now);
+  const rank = {LIVE: 0, ARMED: 1, WATCH: 2, STAND_DOWN: 3, INSUFFICIENT: 4};
+  const actionable = [momentum, liquidity].filter(item => ['LIVE', 'ARMED'].includes(item.state));
+  if (actionable.length === 2 && actionable[0].side !== actionable[1].side) {
+    const base = [...actionable].sort((a, b) => rank[a.state] - rank[b.state] || b.score - a.score)[0];
+    return {...base, state: 'WATCH', action: 'WAIT — Playbook A and Playbook B disagree on direction',
+      playbook_confirmation: 'CONFLICT', signal_id: `${snapshot.symbol}:${base.candle_close_time}:PLAYBOOK_CONFLICT:WATCH`,
+      blocked_by: [...(base.blocked_by || []), 'opposite actionable playbooks; arbiter vetoed the ticket'], ticket: null};
+  }
+  let chosen = [momentum, liquidity].sort((a, b) => rank[a.state] - rank[b.state] || b.score - a.score ||
+    (a.playbook === 'LIQUIDITY_MSS_FVG' ? -1 : 1))[0];
+  if (actionable.length === 2 && actionable[0].side === actionable[1].side) {
+    chosen = {...chosen, playbook_confirmation: 'DUAL_CONFIRMATION',
+      reasons: [...(chosen.reasons || []), 'independent playbooks confirm the same direction']};
+    chosen.ticket = makeTicket(chosen, equity, now);
+  }
+  return chosen;
 }
 
 function newPaper() {
@@ -633,14 +959,17 @@ function updatePaper(signals, prices, now) {
       unrealizedTotal += position.unrealized_pnl_usd;
     }
   }
-  for (const signal of signals) {
-    if (signal.state !== 'LIVE' || !signal.ticket || paper.seen.includes(signal.signal_id) || paper.positions[signal.symbol]) continue;
+  // The desk makes one decision per sweep: only the strongest ranked LIVE
+  // signal may enter the paper ledger, even if several markets qualify.
+  const signal = signals.find(item => item.state === 'LIVE' && item.ticket);
+  if (signal && !paper.seen.includes(signal.signal_id) && !paper.positions[signal.symbol]) {
     const last = paper.history.find(item => item.symbol === signal.symbol);
-    if (last && (now - new Date(last.closed_at)) / 60000 < CFG.cooldownMinutes) continue;
-    if (!riskState(paper).can_open) break;
-    const position = {...signal.ticket, status: 'OPEN', opened_at: now.toISOString(), mark: signal.entry, unrealized_pnl_usd: -signal.ticket.estimated_round_trip_cost_usd};
-    paper.positions[signal.symbol] = position; paper.seen = [...paper.seen, signal.signal_id].slice(-500);
-    paper.tradesToday += 1; paper.lastAction = `OPEN ${signal.side} ${signal.symbol} (browser paper)`;
+    const coolingDown = last && (now - new Date(last.closed_at)) / 60000 < CFG.cooldownMinutes;
+    if (!coolingDown && riskState(paper).can_open) {
+      const position = {...signal.ticket, status: 'OPEN', opened_at: now.toISOString(), mark: signal.entry, unrealized_pnl_usd: -signal.ticket.estimated_round_trip_cost_usd};
+      paper.positions[signal.symbol] = position; paper.seen = [...paper.seen, signal.signal_id].slice(-500);
+      paper.tradesToday += 1; paper.lastAction = `OPEN ${signal.side} ${signal.symbol} (browser paper)`;
+    }
   }
   paper.equity = paper.cash + unrealizedTotal; savePaper(paper);
   return {
@@ -664,7 +993,7 @@ async function scanStatic() {
   const paper = updatePaper(signals, prices, now);
   return {
     app: 'CARRY-DAY', mode: 'PAPER_ONLY', runtime: 'STATIC_GITHUB_PAGES',
-    research_status: 'UNVALIDATED_V2_AFTER_FAILED_V1', status: snapshots.length ? 'LIVE' : 'DEGRADED',
+    research_status: 'UNVALIDATED_DUAL_PLAYBOOK_AFTER_FAILED_V1', status: snapshots.length ? 'LIVE' : 'DEGRADED',
     last_scan: now.toISOString(), scan_duration_seconds: ((performance.now() - started) / 1000).toFixed(2),
     universe: contexts.map(item => item.symbol), signals,
     fires: signals.filter(item => item.state === 'LIVE').length, errors, paper

@@ -4,10 +4,40 @@ This is the new day-trading application inside the CARRY-1 research repo. It
 does not modify or relabel the rejected multi-day funding-carry strategy.
 
 Live static version:
-[`https://talentsolutionsmyanmar-max.github.io/carry1-scanner/`](https://talentsolutionsmyanmar-max.github.io/carry1-scanner/)
+[`https://talentsolutionsmyanmar-max.github.io/carry1-scanner/daytrader/`](https://talentsolutionsmyanmar-max.github.io/carry1-scanner/daytrader/)
 
 The GitHub Pages build runs directly in the browser and persists its paper
 ledger in `localStorage`. It does not require the Python server or an API key.
+
+## Two independent playbooks, one decision
+
+The scanner evaluates both playbooks on closed Binance candles, then a single
+arbiter emits at most one ticket per symbol and the desk displays only the
+strongest ticket across the universe:
+
+- **Playbook A — Momentum Breakout:** the existing 1h regime, 15m trend, 5m
+  EMA/momentum/volume/VWAP stack and controlled 20-bar breakout.
+- **Playbook B — Liquidity MSS/FVG:** an objective ICT/SMC-inspired sequence:
+  a known liquidity level is swept and reclaimed, price closes through a
+  confirmed minor swing with displacement, an unfilled three-candle fair value
+  gap remains, and entry is planned at its 50% midpoint in the correct half of
+  the 15m dealing range.
+
+Confirmed swing pivots require two closed bars on both sides. A sweep can use a
+previous-day high/low, a completed Asia-session high/low, or a previously
+confirmed 5m/15m swing. Displacement requires a body at least 1.2× the prior
+20-bar median with a directional close. The FVG must be at least 0.08 ATR and
+must not be fully filled. These definitions are deliberately mechanical and
+non-repainting; the engine does not guess discretionary order blocks.
+
+If both playbooks are actionable in opposite directions, the arbiter vetoes
+the ticket. If they agree, the selected ticket is labeled `DUAL_CONFIRMATION`
+without adding points. Each playbook retains its own 100-point score so
+derivatives inputs never inflate technical confluence.
+
+The automatic paper ledger follows the same rule: per scan, only the strongest
+ranked `LIVE` signal is eligible to open. It never opens every qualifying market
+as a basket.
 
 ## Derivatives context
 
@@ -65,7 +95,7 @@ The state controls whether that plan is actionable:
 - `WATCH`: directional context exists but no actionable ticket;
 - `STAND DOWN`: no coherent edge.
 
-A `LIVE` ticket requires all of:
+A Playbook A `LIVE` ticket requires all of:
 
 1. Closed 1-hour EMA50/EMA200 regime alignment.
 2. Closed 15-minute EMA20/EMA50 trend alignment.
@@ -78,6 +108,22 @@ A `LIVE` ticket requires all of:
 9. Asia, London, or New York UTC kill zone.
 10. No two-factor conflict from OI, taker flow, funding, and account crowding.
 11. Confluence score of at least 80/100.
+
+A Playbook B `LIVE` ticket requires all of:
+
+1. Closed 1-hour EMA50/EMA200 structure aligned with the trade direction.
+2. Entry in discount for a long or premium for a short, using a closed 15m
+   dealing range.
+3. A recent closed 5m wick through known liquidity and close back across it.
+4. A later 5m close through a pre-sweep confirmed swing (MSS).
+5. MSS displacement body at least 1.2× its prior 20-bar median and a directional
+   close in the outer 30% of the candle.
+6. An unfilled three-candle FVG at least 0.08 ATR.
+7. A current closed-candle retest of the FVG midpoint; `ARMED` means the retest
+   remains pending and nearby.
+8. Spread, ATR, mark drift, swept-extreme stop, modeled friction, session, and
+   derivatives-conflict gates all clear.
+9. Liquidity-playbook score of at least 85/100.
 
 The last, still-forming candle is discarded. Missing or invalid market data
 fails closed.
@@ -94,7 +140,7 @@ Defaults:
 - four new trades per UTC day;
 - a 30-minute same-symbol cooldown after exit;
 - notional capped at 50% of paper equity per trade;
-- structural swing stop with a 1.25 ATR minimum, target ladder at true
+- structural swing/swept-extreme stop, target ladder at a minimum true
   1R/2R/3R after modeled costs;
 - all paper positions close at 2R, after three hours, or on UTC-day rollover;
 - configurable fees and slippage are charged to every completed paper trade.
@@ -128,6 +174,6 @@ strategy over out-of-sample data and a long forward paper period before
 considering any separate execution system.
 
 The initial in-sample diagnostic is published in
-[`RESEARCH.md`](RESEARCH.md). It failed. This multi-indicator V2 is a new,
-unvalidated hypothesis; it does not erase that result, and live execution must
-remain disabled.
+[`RESEARCH.md`](RESEARCH.md). It failed. Both the multi-indicator momentum
+playbook and the new liquidity/MSS/FVG playbook are unvalidated hypotheses;
+they do not erase that result, and live exchange execution must remain disabled.

@@ -80,6 +80,11 @@
     .state.live { color:var(--green); border-color:rgba(50,212,154,.45); background:rgba(50,212,154,.09) }
     .state.armed { color:var(--amber); border-color:rgba(247,191,85,.38); background:rgba(247,191,85,.07) }
     .state.watch { color:var(--amber); border-color:rgba(247,191,85,.28) }
+    .playbook-mini { display:inline-flex; align-items:center; min-height:22px; margin-left:8px; padding:3px 7px;
+      border:1px solid rgba(61,217,235,.27); border-radius:99px; color:#8cecf5; background:rgba(61,217,235,.06);
+      font:700 8px var(--mono); letter-spacing:.06em }
+    td .playbook-mini { margin-left:0 }
+    .playbook-mini.liquidity { color:#c9d2ff; border-color:rgba(107,140,255,.38); background:rgba(107,140,255,.08) }
     .bar { width:58px; height:4px; background:#1b2434; border-radius:4px; display:inline-block; overflow:hidden; vertical-align:middle }
     .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--cyan)) }
     .empty { padding:40px 20px; text-align:center; color:var(--faint) }
@@ -105,6 +110,22 @@
     .levels b { display:block; overflow:hidden; text-overflow:ellipsis; margin-top:3px; font:700 11px var(--mono) }
     .levels .stop b { color:var(--red) }
     .levels div:nth-child(n+3) b { color:var(--green) }
+    .playbook-context { margin-top:10px; padding:11px; border:1px solid rgba(61,217,235,.22); border-radius:10px;
+      background:linear-gradient(135deg,rgba(61,217,235,.055),rgba(16,24,39,.16)) }
+    .playbook-context.liquidity { border-color:rgba(107,140,255,.34);
+      background:linear-gradient(135deg,rgba(107,140,255,.095),rgba(61,217,235,.025)) }
+    .playbook-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:9px }
+    .playbook-kicker { display:block; color:#89e7f1; font:750 9px var(--mono); letter-spacing:.13em }
+    .playbook-context.liquidity .playbook-kicker { color:#bdc8ff }
+    .playbook-head small { display:block; margin-top:2px; color:var(--faint); font:7px var(--mono); letter-spacing:.07em }
+    .playbook-confirmation { display:inline-flex; min-height:22px; align-items:center; padding:3px 8px; border:1px solid var(--line);
+      border-radius:99px; color:var(--muted); font:700 8px var(--mono); letter-spacing:.08em; white-space:nowrap }
+    .playbook-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px; overflow:hidden;
+      border:1px solid rgba(32,43,63,.8); border-radius:8px; background:var(--line) }
+    .playbook-grid div { min-width:0; padding:7px 8px; background:#0b121f }
+    .playbook-grid span { display:block; color:var(--faint); font:7px var(--mono); letter-spacing:.07em; white-space:nowrap }
+    .playbook-grid b { display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      color:var(--ink); font:600 9px var(--mono) }
     .indicator-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:1px; margin-top:10px;
       background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden }
     .indicator-grid span { padding:7px 8px; color:var(--faint); background:#0b121f; font:7px var(--mono); letter-spacing:.07em }
@@ -169,6 +190,7 @@
       .layout { grid-template-columns:1fr }
       .tickets { grid-template-columns:1fr }
       .derivatives-grid { grid-template-columns:repeat(3,1fr) }
+      .playbook-grid { grid-template-columns:repeat(4,1fr) }
     }
     @media(max-width:650px) {
       .shell { width:min(100% - 20px,1420px); padding-top:16px }
@@ -178,7 +200,10 @@
       .levels { grid-template-columns:repeat(2,1fr) }.levels div { border-top:1px solid var(--line) }
       .indicator-grid { grid-template-columns:repeat(3,1fr) }
       .derivatives-grid { grid-template-columns:repeat(2,1fr) }
+      .playbook-grid { grid-template-columns:repeat(2,1fr) }
       .ticket-meta { grid-template-columns:repeat(2,1fr) }
+      .ticket-head > div:first-child { display:flex; flex-wrap:wrap; align-items:center; row-gap:7px }
+      .playbook-mini { margin-left:7px }
       .method { display:block }.method .formula { white-space:normal; margin-bottom:8px }
     }
   </style>
@@ -188,10 +213,10 @@
   <header>
     <div class="brand">
       <div class="mark"></div>
-      <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">closed-candle + derivatives-aware signal desk</div></div>
+      <div><h1>CARRY<span>·DAY</span></h1><div class="tagline">dual-playbook closed-candle signal desk</div></div>
     </div>
     <div class="status"><i class="dot" id="dot"></i><span id="status">CONNECTING</span></div>
-    <div class="paper">PAPER ONLY · V2 UNVALIDATED</div>
+    <div class="paper">PAPER ONLY · DUAL PLAYBOOK UNVALIDATED</div>
   </header>
 
   <section class="hero">
@@ -216,8 +241,8 @@
       <div class="panel-head"><h2>liquid USDT perpetuals · signal board</h2><div class="count" id="scanTime">not scanned</div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>SYMBOL</th><th>STATE</th><th>SIDE</th><th>SCORE</th><th>RSI / ADX</th><th>VOL ×</th><th>COST/STOP</th><th>SPREAD</th><th>DERIV</th><th>24H</th></tr></thead>
-          <tbody id="signals"><tr><td colspan="10" class="empty">warming market data…</td></tr></tbody>
+          <thead><tr><th>SYMBOL</th><th>STATE</th><th>PLAYBOOK</th><th>SIDE</th><th>SCORE</th><th>RSI / ADX</th><th>VOL ×</th><th>COST/STOP</th><th>SPREAD</th><th>DERIV</th><th>24H</th></tr></thead>
+          <tbody id="signals"><tr><td colspan="11" class="empty">warming market data…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -243,8 +268,8 @@
   </div>
 
   <section class="method">
-    <div class="formula">LIVE ⇔ 1h regime + 15m trend + 5m trigger + momentum + volume + friction + OI/taker/crowding context + kill zone</div>
-    <div><b>Ticket states:</b> LIVE cleared every gate; ARMED is a conditional stop-entry plan; WATCH is analysis only; STAND DOWN means no trade. The derivatives panel uses Binance public open-interest, taker-flow, funding, and account-ratio feeds. It is not CoinGlass data and not a liquidation map. A two-factor derivatives conflict vetoes actionable status without adding points to the technical score. V2 remains unvalidated paper research and never sends an exchange order.</div>
+    <div class="formula">LIVE ⇔ [A · momentum breakout OR B · sweep → MSS → displacement → FVG retest] + friction + derivatives veto + kill zone</div>
+    <div><b>One arbiter, two independent playbooks:</b> Playbook A retains the multi-indicator momentum breakout. Playbook B is an objective ICT/SMC-inspired liquidity sequence built only from confirmed closed candles; it does not guess order blocks. Opposite actionable directions veto the ticket, while same-direction agreement is labeled dual confirmation without adding score. LIVE cleared every gate; ARMED is conditional; WATCH is analysis only. Binance public derivatives remain a veto-only context layer, not a liquidation map. This dual-playbook version is unvalidated paper research and never sends an exchange order.</div>
   </section>
 </main>
 <script src="static.js"></script>

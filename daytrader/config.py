@@ -66,6 +66,20 @@ class Config:
     entry_expiry_minutes: int = 20
     min_reward_cost_multiple: float = 3.0
 
+    # Playbook B: closed-candle liquidity sweep -> MSS -> displacement/FVG.
+    # Every threshold is explicit so the browser and Python engines can stay in parity.
+    liquidity_sweep_lookback: int = 8
+    swing_left_bars: int = 2
+    swing_right_bars: int = 2
+    sweep_buffer_atr: float = 0.03
+    mss_buffer_atr: float = 0.02
+    displacement_body_ratio: float = 1.20
+    fvg_min_atr: float = 0.08
+    fvg_entry_max_distance_atr: float = 0.75
+    liquidity_signal_score: int = 85
+    liquidity_armed_score: int = 80
+    liquidity_stop_min_atr: float = 0.75
+
     starting_equity_usd: float = 10_000.0
     risk_per_trade_pct: float = 0.25
     max_daily_loss_pct: float = 1.00

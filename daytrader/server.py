@@ -40,7 +40,7 @@ class Scanner:
         self.state = {
             "app": "CARRY-DAY",
             "mode": "PAPER_ONLY",
-            "research_status": "UNVALIDATED_V2_AFTER_FAILED_V1",
+            "research_status": "UNVALIDATED_DUAL_PLAYBOOK_AFTER_FAILED_V1",
             "status": "STARTING",
             "last_scan": None,
             "next_scan": None,
@@ -50,9 +50,9 @@ class Scanner:
             "paper": self.broker.snapshot(),
             "config": self.config.public_dict(),
             "method": (
-                "closed 5m trigger + momentum/strength/volume/VWAP, aligned with "
-                "15m trend and 1h regime; OI/taker/crowding context, friction, "
-                "session, and risk gates fail closed"
+                "one arbiter over two closed-candle playbooks: momentum breakout, "
+                "or liquidity sweep -> MSS -> displacement -> unfilled FVG retest; "
+                "OI/taker/crowding, friction, session, and risk gates fail closed"
             ),
         }
 
@@ -116,9 +116,17 @@ class Scanner:
             )
         )
         if self.config.auto_paper:
-            for signal in signals:
-                if signal["state"] != "LIVE" or not signal["ticket"]:
-                    continue
+            # One decision per scan: only the strongest ranked LIVE signal is
+            # eligible for automatic paper entry.
+            signal = next(
+                (
+                    item
+                    for item in signals
+                    if item["state"] == "LIVE" and item["ticket"]
+                ),
+                None,
+            )
+            if signal is not None:
                 opened, reason = self.broker.open_from_ticket(
                     signal["ticket"], now=started
                 )

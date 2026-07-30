@@ -3,9 +3,22 @@ from __future__ import annotations
 import math
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from daytrader.config import Config
-from daytrader.engine import adx, atr, build_ticket, ema, evaluate_snapshot, macd, rsi, stoch_rsi
+from daytrader.engine import (
+    Signal,
+    adx,
+    atr,
+    build_ticket,
+    confirmed_swings,
+    ema,
+    evaluate_snapshot,
+    find_fair_value_gaps,
+    macd,
+    rsi,
+    stoch_rsi,
+)
 from daytrader.market import Candle, MarketSnapshot
 
 
@@ -75,6 +88,30 @@ class IndicatorTests(unittest.TestCase):
         self.assertIsNotNone(value)
         self.assertGreater(value, 0)
 
+    def test_swing_is_not_visible_until_right_bars_close(self):
+        rows = tuple(
+            Candle(i, i, 1.0, high, 0.5, 1.0, 1.0, 1.0, 1)
+            for i, high in enumerate((1.0, 2.0, 5.0, 2.0, 1.0))
+        )
+        self.assertEqual(confirmed_swings(rows[:4])["highs"], [])
+        swings = confirmed_swings(rows)["highs"]
+        self.assertEqual(len(swings), 1)
+        self.assertEqual(swings[0]["index"], 2)
+        self.assertEqual(swings[0]["confirmation_index"], 4)
+
+    def test_fvg_reports_current_midpoint_retest_without_full_fill(self):
+        rows = (
+            Candle(0, 0, 99.5, 100.0, 99.0, 99.8, 1, 1, 1),
+            Candle(1, 1, 99.8, 100.3, 99.7, 100.1, 1, 1, 1),
+            Candle(2, 2, 101.1, 101.5, 101.0, 101.4, 1, 1, 1),
+            Candle(3, 3, 101.4, 101.7, 100.7, 101.2, 1, 1, 1),
+            Candle(4, 4, 101.2, 101.4, 100.4, 100.9, 1, 1, 1),
+        )
+        gap = next(item for item in find_fair_value_gaps(rows, "LONG", 2, 1.0) if item["index"] == 2)
+        self.assertEqual(gap["low"], 100.0)
+        self.assertEqual(gap["high"], 101.0)
+        self.assertEqual(gap["retest_index"], 4)
+
 
 class SignalTests(unittest.TestCase):
     def snapshot(self, spread_bp: float = 2.0, **derivatives) -> MarketSnapshot:
@@ -104,6 +141,66 @@ class SignalTests(unittest.TestCase):
             quote_volume_24h=1_000_000_000,
             captured_at="2026-01-01T00:00:00+00:00",
             **context,
+        )
+
+    def liquidity_snapshot(self) -> MarketSnapshot:
+        primary = list(candles(80, 5, direction=1.0))
+        base = primary[-1].close
+        interval_ms = 5 * 60 * 1000
+
+        def append(opening, high, low, close, volume=2_000.0):
+            index = len(primary)
+            primary.append(
+                Candle(
+                    open_time=index * interval_ms,
+                    close_time=(index + 1) * interval_ms - 1,
+                    open=opening,
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=volume,
+                    quote_volume=volume * close,
+                    trades=200,
+                )
+            )
+
+        append(base, base + 0.05, base - 0.40, base - 0.10)
+        append(base - 0.10, base + 0.25, base - 0.12, base + 0.15)
+        append(base + 0.15, base + 0.55, base + 0.10, base + 0.35)
+        append(base + 0.35, base + 0.40, base + 0.05, base + 0.20)
+        append(base + 0.20, base + 0.30, base, base + 0.10)
+        append(base + 0.10, base + 0.15, base - 0.55, base - 0.22)
+        append(base - 0.22, base + 0.75, base - 0.25, base + 0.70, 4_000.0)
+        append(base + 0.70, base + 0.95, base + 0.30, base + 0.85, 3_000.0)
+        append(base + 0.85, base + 0.90, base + 0.20, base + 0.65, 2_500.0)
+        mark = primary[-1].close
+        half = 2.0 / 20_000.0
+        trend = tuple(
+            Candle(
+                bar.open_time,
+                bar.close_time,
+                bar.open + 10.0,
+                bar.high + 10.0,
+                bar.low + 10.0,
+                bar.close + 10.0,
+                bar.volume,
+                bar.quote_volume,
+                bar.trades,
+            )
+            for bar in candles(120, 15, direction=1.0)
+        )
+        return MarketSnapshot(
+            symbol="LIQUSDT",
+            primary=tuple(primary),
+            trend=trend,
+            higher=candles(220, 60, direction=1.0),
+            bid=mark * (1 - half),
+            ask=mark * (1 + half),
+            mark=mark,
+            funding_bp=0.0,
+            price_change_pct_24h=1.0,
+            quote_volume_24h=1_000_000_000,
+            captured_at="2026-01-01T01:00:00+00:00",
         )
 
     def test_long_breakout_produces_risk_sized_ticket(self):
@@ -218,6 +315,45 @@ class SignalTests(unittest.TestCase):
         self.assertTrue(all(math.isfinite(value) for value in macd(closes)))
         self.assertTrue(math.isfinite(stoch_rsi(closes)))
         self.assertTrue(math.isfinite(adx(bars)))
+
+    def test_liquidity_sweep_mss_fvg_retest_produces_playbook_b_ticket(self):
+        config = Config(
+            min_reward_cost_multiple=1.0,
+            max_friction_stop_pct=100.0,
+            liquidity_signal_score=85,
+        )
+        signal = evaluate_snapshot(
+            self.liquidity_snapshot(),
+            config,
+            now=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(signal.state, "LIVE")
+        self.assertEqual(signal.side, "LONG")
+        self.assertEqual(signal.playbook, "LIQUIDITY_MSS_FVG")
+        self.assertIsNotNone(signal.fvg_mid)
+        self.assertIsNotNone(signal.mss_level)
+        self.assertIsNotNone(signal.ticket)
+        self.assertLess(signal.ticket["stop"], signal.ticket["entry"])
+        self.assertGreater(signal.ticket["tp3"], signal.ticket["tp2"])
+
+    def test_opposite_actionable_playbooks_are_vetoed(self):
+        momentum = Signal(
+            symbol="TESTUSDT", state="LIVE", side="LONG", score=91,
+            action="enter", playbook="MOMENTUM_BREAKOUT",
+        )
+        liquidity = Signal(
+            symbol="TESTUSDT", state="ARMED", side="SHORT", score=95,
+            action="arm", playbook="LIQUIDITY_MSS_FVG",
+            playbook_label="PLAYBOOK B · LIQUIDITY MSS/FVG",
+        )
+        with patch("daytrader.engine._evaluate_momentum_snapshot", return_value=momentum), patch(
+            "daytrader.engine._evaluate_liquidity_snapshot", return_value=liquidity
+        ):
+            signal = evaluate_snapshot(self.snapshot(), Config())
+        self.assertEqual(signal.state, "WATCH")
+        self.assertEqual(signal.playbook_confirmation, "CONFLICT")
+        self.assertIsNone(signal.ticket)
+        self.assertTrue(any("arbiter vetoed" in item for item in signal.blocked_by))
 
 
 if __name__ == "__main__":

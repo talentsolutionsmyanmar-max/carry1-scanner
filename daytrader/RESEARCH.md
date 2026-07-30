@@ -2,6 +2,12 @@
 
 *Run 2026-07-29. This is an in-sample diagnostic, not validation.*
 
+> **Dual-playbook status (2026-07-30):** The liquidity sweep → MSS →
+> displacement → FVG playbook was added after this diagnostic. It has no
+> backtest claim in this document and remains paper-only. Its objective,
+> closed-candle definitions reduce discretionary interpretation; they do not
+> establish an edge.
+
 > **V2 status:** The dashboard now reports a broader multi-timeframe confluence
 > model and complete conditional trade tickets. That V2 logic was created after
 > observing the failed result below, so this sample cannot validate it. V2 must

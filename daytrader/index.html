@@ -90,6 +90,32 @@
     .empty { padding:40px 20px; text-align:center; color:var(--faint) }
 
     .tickets-panel { margin-top:18px }
+    .quantrex-panel { margin-top:18px; border-color:rgba(107,140,255,.35) }
+    .quantrex-banner { padding:12px 16px; display:flex; flex-wrap:wrap; gap:8px 18px;
+      border-bottom:1px solid var(--line); color:var(--muted); font:9px var(--mono); letter-spacing:.08em }
+    .quantrex-banner b { color:var(--cyan) }
+    .quantrex-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; background:var(--line) }
+    .quantrex-card { min-width:0; padding:15px; background:linear-gradient(145deg,#0d1626,#090f1a) }
+    .quantrex-card h3 { margin:0; display:flex; align-items:center; gap:8px; font:750 14px var(--mono) }
+    .quantrex-card h3 small { margin-left:auto; color:var(--muted); font:8px var(--mono) }
+    .quantrex-levels { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:12px }
+    .quantrex-levels div { min-width:0; padding:8px; border:1px solid var(--line); border-radius:8px; background:#0a111d }
+    .quantrex-levels span { display:block; color:var(--faint); font:7px var(--mono); letter-spacing:.09em }
+    .quantrex-levels b { display:block; overflow:hidden; text-overflow:ellipsis; color:var(--ink); font:650 10px var(--mono); margin-top:2px }
+    .quantrex-levels .sl b { color:var(--red) }.quantrex-levels .tp b { color:var(--green) }
+    .quantrex-blocks { margin:10px 0 0; color:#c7a66b; font-size:9px }
+    .quantrex-chart { position:relative; height:230px; margin-top:12px; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#080e18 }
+    .quantrex-chart-canvas { height:218px }
+    .quantrex-session-strip { position:absolute; z-index:3; inset:0 0 auto; height:8px; display:flex; pointer-events:none }
+    .quantrex-session-strip i { display:block; height:100% }
+    .quantrex-session-strip .london { background:rgba(61,217,235,.72) }
+    .quantrex-session-strip .new-york { background:rgba(107,140,255,.72) }
+    .quantrex-session-strip .outside { background:rgba(126,141,168,.12) }
+    .quantrex-session-key { margin-top:6px; color:var(--faint); font:8px var(--mono); letter-spacing:.04em }
+    .chart-fallback { height:100%; display:grid; place-items:center; padding:18px; color:var(--faint); text-align:center; font:10px var(--mono) }
+    .tv-attribution { padding:7px 16px 11px; color:var(--faint); font:9px var(--mono); text-align:right }
+    .tv-attribution a { color:var(--muted) }
+    .quantrex-empty { grid-column:1/-1; padding:28px; text-align:center; color:var(--faint); background:#0b121f }
     .tickets { padding:14px; display:grid; gap:12px; grid-template-columns:minmax(0,1fr) }
     .ticket { border:1px solid var(--line); border-radius:14px; padding:16px;
       background:linear-gradient(145deg,rgba(12,20,33,.96),rgba(7,12,21,.96)); position:relative; overflow:hidden }
@@ -191,6 +217,7 @@
       .tickets { grid-template-columns:1fr }
       .derivatives-grid { grid-template-columns:repeat(3,1fr) }
       .playbook-grid { grid-template-columns:repeat(4,1fr) }
+      .quantrex-grid { grid-template-columns:1fr }
     }
     @media(max-width:650px) {
       .shell { width:min(100% - 20px,1420px); padding-top:16px }
@@ -229,6 +256,30 @@
     <div class="metric"><div class="k">Daily P&amp;L</div><div class="v" id="dailyPnl">—</div><div class="s" id="lossLimit">limit —</div></div>
     <div class="metric"><div class="k">Trades / cap</div><div class="v" id="trades">—</div><div class="s">UTC session</div></div>
     <div class="metric"><div class="k">Open risk</div><div class="v" id="positions">—</div><div class="s" id="positionCap">max —</div></div>
+  </section>
+
+  <section class="panel quantrex-panel" aria-labelledby="quantrexTitle">
+    <div class="panel-head"><h2 id="quantrexTitle">Quantrex M1 · QSR1_V1 vs Breakout v0 · public-market shadow</h2><div class="count" id="quantrexStatus">STARTING</div></div>
+    <div class="quantrex-banner">
+      <span>MODE <b>SHADOW · NO SUBMIT</b></span><span>RISK <b>0.10%</b></span>
+      <span>DISCOVERY <b>TOP 12 USD-M</b></span><span>SCORED V0 <b>BTC · ETH · SOL</b></span><span>SESSIONS <b>LONDON 07–11 · NY 13–17 UTC</b></span>
+      <span>QSR1_V1 EXITS <b>TP1 50% · TP2 30% · TP3 20%</b></span>
+      <span>FORWARD PAPER <b id="quantrexForward">STARTING · SIGNALS 0 · FILLS 0</b></span>
+    </div>
+    <div class="quantrex-grid" id="quantrexBooks"><div class="quantrex-empty">Waiting for public USD-M snapshots. No credential loader or exchange submit path exists.</div></div>
+    <div class="discovery-controls" aria-label="Discovery sorting and filtering">
+      <label for="quantrexSort">SORT DISCOVERY</label>
+      <select id="quantrexSort"><option value="volume">24H VOLUME</option><option value="pair">PAIR</option><option value="change">24H CHANGE</option><option value="spread">SPREAD</option><option value="oi">OPEN INTEREST</option><option value="oi15">OI 15M</option><option value="oi1h">OI 1H</option><option value="taker">TAKER BUY/SELL</option><option value="funding">FUNDING</option><option value="book">BOOK</option></select>
+      <label for="quantrexFilter">QUICK FILTER</label>
+      <select id="quantrexFilter"><option value="all">ALL TOP 12</option><option value="high_volume">HIGH VOLUME</option><option value="oi_spike">OPEN INTEREST SPIKE</option><option value="big_movers">BIG MOVERS</option><option value="high_funding">HIGH FUNDING</option></select>
+    </div>
+    <div class="table-wrap">
+      <table aria-label="Top twelve USD-M liquidity discovery">
+        <thead><tr><th>RANK</th><th>PAIR</th><th>24H CHANGE</th><th>24H QUOTE VOLUME</th><th>SPREAD</th><th>OPEN INTEREST</th><th>OI 15M</th><th>OI 1H</th><th>TAKER BUY/SELL</th><th>FUNDING</th><th>BOOK</th></tr></thead>
+        <tbody id="quantrexDiscovery"><tr><td colspan="11" class="empty">Building top-12 liquidity discovery…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="tv-attribution">Charts powered by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a></div>
   </section>
 
   <section class="panel tickets-panel">
@@ -272,6 +323,7 @@
     <div><b>One arbiter, two independent playbooks:</b> Playbook A retains the multi-indicator momentum breakout. Playbook B is an objective ICT/SMC-inspired liquidity sequence built only from confirmed closed candles; it does not guess order blocks. Opposite actionable directions veto the ticket, while same-direction agreement is labeled dual confirmation without adding score. LIVE cleared every gate; ARMED is conditional; WATCH is analysis only. Binance public derivatives remain a veto-only context layer, not a liquidation map. This dual-playbook version is unvalidated paper research and never sends an exchange order.</div>
   </section>
 </main>
+<script src="https://unpkg.com/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js"></script>
 <script src="static.js"></script>
 </body>
 </html>

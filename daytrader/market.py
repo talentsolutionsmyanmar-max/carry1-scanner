@@ -75,6 +75,8 @@ class MarketSnapshot:
     open_interest_change_1h_pct: float | None = None
     taker_buy_sell_ratio_15m: float | None = None
     long_short_account_ratio: float | None = None
+    bid_depth: tuple[tuple[float, float], ...] = ()
+    ask_depth: tuple[tuple[float, float], ...] = ()
 
 
 class MarketDataError(RuntimeError):
@@ -244,6 +246,7 @@ class BinanceFuturesClient:
             symbol, self.config.higher_interval, self.config.candle_limit
         )
         book = self._get("/fapi/v1/ticker/bookTicker", {"symbol": symbol})
+        depth = self._get("/fapi/v1/depth", {"symbol": symbol, "limit": 20})
         premium = self._get("/fapi/v1/premiumIndex", {"symbol": symbol})
         derivatives = self.derivatives_context(symbol)
         context = self.ticker_context.get(symbol, {})
@@ -259,6 +262,8 @@ class BinanceFuturesClient:
             price_change_pct_24h=float(context.get("price_change_pct_24h") or 0.0),
             quote_volume_24h=float(context.get("quote_volume_24h") or 0.0),
             captured_at=datetime.now(timezone.utc).isoformat(),
+            bid_depth=tuple((float(price), float(quantity)) for price, quantity in depth.get("bids", [])),
+            ask_depth=tuple((float(price), float(quantity)) for price, quantity in depth.get("asks", [])),
             **derivatives,
         )
 

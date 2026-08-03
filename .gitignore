@@ -4,4 +4,6 @@ __pycache__/
 *.py[cod]
 daytrader/.paper_state.json
 daytrader/.paper_state.tmp
+daytrader/.quantrex_paper_state.json
+daytrader/.quantrex_paper_state.json.lock
 daytrader/backtest-results/

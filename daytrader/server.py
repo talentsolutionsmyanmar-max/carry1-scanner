@@ -23,6 +23,7 @@ if __package__ in {None, ""}:
     from daytrader.paper import PaperBroker
     from daytrader.quantrex.config import QuantrexConfig
     from daytrader.quantrex.forward import ForwardPaperRunner
+    from daytrader.quantrex.runtime import SingleInstanceLock, health_snapshot
     from daytrader.quantrex.service import evaluate_public_snapshot
 else:
     from .config import Config
@@ -31,6 +32,7 @@ else:
     from .paper import PaperBroker
     from .quantrex.config import QuantrexConfig
     from .quantrex.forward import ForwardPaperRunner
+    from .quantrex.runtime import SingleInstanceLock, health_snapshot
     from .quantrex.service import evaluate_public_snapshot
 
 
@@ -277,15 +279,17 @@ def make_handler(scanner: Scanner):
                 )
             elif path == "/api/health":
                 state = scanner.snapshot()
-                code = 200 if state["status"] == "LIVE" else 503
+                stale_after = max(
+                    120.0,
+                    scanner.config.scan_interval_seconds * 2.0
+                    + scanner.config.request_timeout_seconds,
+                )
+                code, payload = health_snapshot(
+                    state,
+                    stale_after_seconds=stale_after,
+                )
                 self._send(
-                    json.dumps(
-                        {
-                            "status": state["status"],
-                            "last_scan": state["last_scan"],
-                            "errors": state["errors"],
-                        }
-                    ),
+                    json.dumps(payload),
                     "application/json; charset=utf-8",
                     code,
                 )
@@ -326,32 +330,41 @@ def main() -> None:
         default=ROOT / ".quantrex_paper_state.json",
     )
     parser.add_argument(
+        "--lock-file",
+        type=Path,
+        help="single-writer lock path (defaults beside Quantrex state)",
+    )
+    parser.add_argument(
         "--quantrex-kill-switch",
         action="store_true",
         help="persistently block all new Quantrex paper intents",
     )
     args = parser.parse_args()
+    lock_file = args.lock_file or args.quantrex_state_file.with_suffix(
+        args.quantrex_state_file.suffix + ".lock"
+    )
     config = Config.from_env()
     if args.no_auto_paper:
         config = Config(**{**config.__dict__, "auto_paper": False})
-    scanner = Scanner(config, args.state_file, args.quantrex_state_file)
-    if args.quantrex_kill_switch:
-        scanner.quantrex_runner.set_kill_switch(True)
-    if args.once:
-        print(json.dumps(scanner.scan_once(), indent=2))
-        return
+    with SingleInstanceLock(lock_file):
+        scanner = Scanner(config, args.state_file, args.quantrex_state_file)
+        if args.quantrex_kill_switch:
+            scanner.quantrex_runner.set_kill_switch(True)
+        if args.once:
+            print(json.dumps(scanner.scan_once(), indent=2))
+            return
 
-    thread = threading.Thread(target=scanner.run, daemon=True)
-    thread.start()
-    print(
-        f"CARRY-DAY paper scanner → http://{args.host}:{args.port}/ "
-        f"({config.primary_interval}/{config.trend_interval}/{config.higher_interval}, "
-        f"risk {config.risk_per_trade_pct:.2f}%/trade)"
-    )
-    try:
-        ThreadingHTTPServer((args.host, args.port), make_handler(scanner)).serve_forever()
-    except KeyboardInterrupt:
-        scanner.stop_event.set()
+        thread = threading.Thread(target=scanner.run, daemon=True)
+        thread.start()
+        print(
+            f"CARRY-DAY paper scanner → http://{args.host}:{args.port}/ "
+            f"({config.primary_interval}/{config.trend_interval}/{config.higher_interval}, "
+            f"risk {config.risk_per_trade_pct:.2f}%/trade)"
+        )
+        try:
+            ThreadingHTTPServer((args.host, args.port), make_handler(scanner)).serve_forever()
+        except KeyboardInterrupt:
+            scanner.stop_event.set()
 
 
 if __name__ == "__main__":

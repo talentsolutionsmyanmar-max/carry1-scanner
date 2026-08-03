@@ -177,3 +177,48 @@ The initial in-sample diagnostic is published in
 [`RESEARCH.md`](RESEARCH.md). It failed. Both the multi-indicator momentum
 playbook and the new liquidity/MSS/FVG playbook are unvalidated hypotheses;
 they do not erase that result, and live exchange execution must remain disabled.
+
+## Quantrex v0 paper and shadow desk
+
+The server dashboard also exposes a separate, versioned Quantrex research
+panel for BTCUSDT, ETHUSDT, and SOLUSDT USD-M perpetuals. It evaluates QSR-1
+DAY QSR1_V1 and Breakout v0 from completed 15-minute bars. QSR1_V1 shows the
+next-quote entry, hard stop, Take Profit 1 (50% at net 1R), Take Profit 2 (30%
+at net 1.5R), Take Profit 3 (20% at net 2R), session/kill zone, time exit, risk,
+modeled cost, and every fail-closed blocker. Breakout remains a single net-1.5R
+exit so the adversarial benchmark is not silently changed.
+
+The shared Quantrex lifecycle lives in `daytrader/quantrex/`. Its venue is
+`SHADOW_NO_SUBMIT`: the code has no credential loader, authenticated HTTP
+client, order endpoint, or runtime enable switch. Calling `submit()` always
+raises `SubmissionDisabled`. Public market quotes may be compared with would-be
+orders, but this version cannot place a funded exchange order.
+
+Alongside the scored v0 cohort, the dashboard maintains a read-only top-12
+USD-M discovery table ranked by Binance 24-hour quote volume. Discovery symbols
+show 24-hour change, spread, open interest, short-horizon OI changes, taker
+buy/sell ratio, and funding, and may be sorted by volume, OI, or funding. They
+are explicitly labeled `DISCOVERY` and do not enter the scored
+QSR/Breakout book until a new universe version is frozen.
+
+Historical promotion metrics are evaluated separately by
+`daytrader.quantrex.research`. It creates anchored, chronologically purged
+walk-forward windows plus an explicitly untouched final OOS window, reports a
+deterministic bootstrap interval, profit factor, drawdown, tail loss, turnover,
+costs, and symbol/session concentration, and returns `NO_GO` whenever a frozen
+gate or required stress/integrity input is missing. It consumes Quantrex trade
+rows; it does not relabel the legacy exploratory CARRY-DAY backtest as QSR-1
+evidence.
+
+`daytrader.quantrex.forward.ForwardPaperRunner` is the durable forward-paper
+coordinator. It journals every versioned signal and risk rejection, processes
+each completed bar once, persists fills and reconciliation hashes, and opens a
+paper intent only when exactly one accepted candidate exists and no Quantrex
+position is already open. Simultaneous accepted candidates fail closed rather
+than relying on an unfrozen priority rule. The runner contains no exchange
+client and reports `FORWARD_PAPER_NO_SUBMIT`.
+Start the server with `--quantrex-kill-switch` to persistently block every new
+Quantrex paper intent; the dashboard exposes the resulting `KILL ACTIVE`
+state. Clearing it is intentionally not exposed through the unauthenticated
+HTTP dashboard and must be an explicit local operator action through the
+runner before a restart.

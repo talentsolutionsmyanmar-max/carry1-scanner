@@ -186,6 +186,177 @@ function tradeRow(t) {
   return `<div class="trade"><b>${esc(t.symbol)} · ${esc(t.side)} · ${esc(t.exit_reason)}</b><span>${new Date(t.closed_at).toISOString().slice(5, 16).replace('T', ' ')}</span><div class="pnl ${pnlClass(pnl)}">${pnl >= 0 ? '+' : ''}${money(pnl)}</div></div>`;
 }
 
+function quantrexCard(c) {
+  const side = c.side === 'LONG' ? 'good' : 'bad';
+  const blocks = (c.blocked_by || []).map(item => esc(item)).join(' · ');
+  const timeExit = c.time_exit ? new Date(Number(c.time_exit)).toISOString().slice(11, 16) + ' UTC' : '—';
+  return `<article class="quantrex-card">
+    <h3><span class="state ${String(c.state).toLowerCase()}">${esc(c.state)}</span>${esc(c.symbol)} <span class="${side}">${esc(c.side)}</span><small>${esc(c.book)}</small></h3>
+    <div class="quantrex-levels">
+      <div><span>ENTRY · NEXT QUOTE</span><b>${price(c.entry)}</b></div>
+      <div class="sl"><span>STOP LOSS</span><b>${price(c.stop)}</b></div>
+      <div class="tp"><span>TAKE PROFIT 1 · 50% · NET 1R</span><b>${price(c.tp1)}</b></div>
+      <div class="tp"><span>TAKE PROFIT 2 · 30% · NET 1.5R</span><b>${price(c.tp2)}</b></div>
+      <div class="tp"><span>TAKE PROFIT 3 · 20% · NET 2R</span><b>${price(c.tp3)}</b></div>
+      <div><span>KILL ZONE</span><b>${esc(c.kill_zone)}</b></div>
+      <div><span>TIME EXIT</span><b>${timeExit}</b></div>
+      <div><span>RISK / SIZE</span><b>${money(c.risk_usd)} · ${num(c.quantity, 6)}</b></div>
+      <div><span>ROUND-TRIP COST</span><b>${money((c.costs || {}).round_trip_usd)}</b></div>
+    </div>
+    <div class="quantrex-blocks">${blocks ? `BLOCKED · ${blocks}` : 'SHADOW ORDER READY · physically unable to submit'}</div>
+    <div class="quantrex-chart" id="quantrexChart-${esc(c.idempotency_key).replace(/[^a-zA-Z0-9_-]/g, '-')}"><div class="chart-fallback">Loading completed 15-minute candles…</div></div>
+  </article>`;
+}
+
+function renderNativeQuantrexChart(container, candidate, sessions, runs) {
+  const bars = candidate.chart_bars || [];
+  const width = Math.max(container.clientWidth || 640, 320);
+  const height = 218;
+  const pad = { top: 15, right: 70, bottom: 20, left: 8 };
+  const levels = [candidate.entry, candidate.stop, candidate.tp1, candidate.tp2, candidate.tp3].filter(value => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+  const prices = bars.flatMap(bar => [Number(bar.high), Number(bar.low)]).concat(levels);
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  const range = Math.max(high - low, Math.abs(high) * 0.0001, 1e-8);
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const x = index => pad.left + ((index + .5) / bars.length) * plotWidth;
+  const y = value => pad.top + ((high - Number(value)) / range) * plotHeight;
+  const candleWidth = Math.max(1, Math.min(6, plotWidth / bars.length * .62));
+  const candles = bars.map((bar, index) => {
+    const open = Number(bar.open), close = Number(bar.close), color = close >= open ? '#32d49a' : '#ff657a';
+    const bodyTop = Math.min(y(open), y(close));
+    const bodyHeight = Math.max(1, Math.abs(y(open) - y(close)));
+    return `<line x1="${x(index)}" y1="${y(bar.high)}" x2="${x(index)}" y2="${y(bar.low)}" stroke="${color}" stroke-width="1"/><rect x="${x(index) - candleWidth / 2}" y="${bodyTop}" width="${candleWidth}" height="${bodyHeight}" fill="${color}"/>`;
+  }).join('');
+  const priceLines = [
+    ['ENTRY', candidate.entry, '#eef4ff'], ['SL', candidate.stop, '#ff657a'],
+    ['TP1', candidate.tp1, '#f7bf55'], ['TP2', candidate.tp2, '#32d49a'], ['TP3', candidate.tp3, '#3dd9eb'],
+  ].filter(([, value]) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(([label, value, color]) => `<line x1="${pad.left}" y1="${y(value)}" x2="${width - pad.right}" y2="${y(value)}" stroke="${color}" stroke-width="1" stroke-dasharray="4 4"/><text x="${width - pad.right + 5}" y="${y(value) + 3}" fill="${color}" font-size="8" font-family="monospace">${label} ${price(value)}</text>`).join('');
+  container.innerHTML = `<div class="quantrex-session-strip" aria-label="Kill Zone session shading">${runs.map(run => `<i class="${run.name}" style="width:${run.count / sessions.length * 100}%"></i>`).join('')}</div><svg class="quantrex-chart-canvas" viewBox="0 0 ${width} ${height}" role="img" aria-label="Completed 15-minute candlestick chart with entry, Stop Loss, and Take Profit levels" preserveAspectRatio="none"><line x1="${pad.left}" y1="${pad.top + plotHeight}" x2="${width - pad.right}" y2="${pad.top + plotHeight}" stroke="#202b3f"/>${candles}${priceLines}</svg>`;
+}
+
+function renderQuantrexChart(candidate) {
+  const id = `quantrexChart-${String(candidate.idempotency_key).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const container = $(id);
+  const lib = window.LightweightCharts;
+  if (!container || !(candidate.chart_bars || []).length) {
+    if (container) container.innerHTML = '<div class="chart-fallback">Completed candles unavailable. Trading logic remains fail-closed.</div>';
+    return;
+  }
+  const sessions = (candidate.chart_bars || []).map(bar => {
+    const hour = new Date(Number(bar.time) * 1000).getUTCHours();
+    return hour >= 7 && hour < 11 ? 'london' : hour >= 13 && hour < 17 ? 'new-york' : 'outside';
+  });
+  const runs = sessions.reduce((items, name) => {
+    const last = items[items.length - 1];
+    if (last && last.name === name) last.count += 1;
+    else items.push({ name, count: 1 });
+    return items;
+  }, []);
+  if (!lib) {
+    renderNativeQuantrexChart(container, candidate, sessions, runs);
+    return;
+  }
+  container.innerHTML = `<div class="quantrex-session-strip" aria-label="Kill Zone session shading">${runs.map(run => `<i class="${run.name}" style="width:${run.count / sessions.length * 100}%"></i>`).join('')}</div><div class="quantrex-chart-canvas"></div>`;
+  const canvasHost = container.querySelector('.quantrex-chart-canvas');
+  const chart = lib.createChart(canvasHost, {
+    width: container.clientWidth,
+    height: 218,
+    layout: { background: { type: 'solid', color: '#080e18' }, textColor: '#7e8da8' },
+    grid: { vertLines: { color: '#151e2c' }, horzLines: { color: '#151e2c' } },
+    rightPriceScale: { borderColor: '#202b3f' },
+    timeScale: { borderColor: '#202b3f', timeVisible: true, secondsVisible: false },
+  });
+  const candles = chart.addSeries(lib.CandlestickSeries, {
+    upColor: '#32d49a', downColor: '#ff657a', borderVisible: false,
+    wickUpColor: '#32d49a', wickDownColor: '#ff657a', priceLineVisible: false,
+  });
+  candles.setData(candidate.chart_bars);
+  const levels = [
+    ['ENTRY', candidate.entry, '#eef4ff', 0],
+    ['SL · STOP LOSS', candidate.stop, '#ff657a', 2],
+    ['TP1 · 50%', candidate.tp1, '#f7bf55', 2],
+    ['TP2 · 30%', candidate.tp2, '#32d49a', 2],
+    ['TP3 · 20%', candidate.tp3, '#3dd9eb', 2],
+  ];
+  levels.filter(([, value]) => value !== null && value !== undefined && Number.isFinite(Number(value))).forEach(([title, value, color, lineStyle]) => {
+    candles.createPriceLine({ price: Number(value), color, lineWidth: 1, lineStyle, axisLabelVisible: true, title });
+  });
+  chart.timeScale().fitContent();
+  const resize = new ResizeObserver(entries => entries.forEach(entry => chart.applyOptions({ width: entry.contentRect.width })));
+  resize.observe(container);
+}
+
+function quantrexMarketCard(book) {
+  const candidate = (book.candidates || [])[0];
+  if (candidate) return quantrexCard(candidate);
+  return `<article class="quantrex-card">
+    <h3><span class="state watch">${esc(book.status || 'NO SIGNAL')}</span>${esc(book.symbol)}<small>FLAT CONTROL</small></h3>
+    <div class="quantrex-blocks">No versioned QSR-1 or Breakout candidate on the latest completed 15-minute bar. Position remains zero.</div>
+    <div class="quantrex-chart" id="quantrexChart-market-${esc(book.symbol)}"><div class="chart-fallback">Loading completed 15-minute candles…</div></div>
+    <div class="quantrex-session-key">KILL ZONE SHADING · CYAN LONDON 07–11 · BLUE NEW YORK 13–17 UTC</div>
+  </article>`;
+}
+
+function renderQuantrexMarketChart(book) {
+  if ((book.candidates || []).length) {
+    book.candidates.forEach(renderQuantrexChart);
+    return;
+  }
+  renderQuantrexChart({
+    idempotency_key: `market-${book.symbol}`,
+    chart_bars: book.chart_bars || [],
+    entry: null, stop: null, tp1: null, tp2: null, tp3: null,
+  });
+}
+
+let latestQuantrex = null;
+
+function renderQuantrex(q) {
+  if (!q) return;
+  latestQuantrex = q;
+  $('quantrexStatus').textContent = `${q.status || 'UNKNOWN'} · ${q.no_submit === false ? 'UNSAFE' : 'NO_SUBMIT'}`;
+  $('quantrexStatus').className = `count ${q.no_submit === false ? 'bad' : 'good'}`;
+  const forward = q.forward_paper || {};
+  const killActive = Boolean((((forward.broker || {}).risk || {}).kill_switch));
+  $('quantrexForward').textContent = `${forward.mode || 'STARTING'} · SIGNALS ${forward.signals || 0} · FILLS ${forward.fills || 0} · KILL ${killActive ? 'ACTIVE' : 'CLEAR'}`;
+  const books = q.books || [];
+  $('quantrexBooks').innerHTML = books.length ? books.map(quantrexMarketCard).join('') :
+    '<div class="quantrex-empty">Waiting for validated completed 15-minute USD-M bars.</div>';
+  books.forEach(renderQuantrexMarketChart);
+  const sortMode = ($('quantrexSort') || {}).value || 'volume';
+  const filterMode = ($('quantrexFilter') || {}).value || 'all';
+  const sortFields = { volume: 'quote_volume_24h', change: 'price_change_pct_24h', spread: 'spread_bp', oi: 'open_interest_usd', oi15: 'open_interest_change_15m_pct', oi1h: 'open_interest_change_1h_pct', taker: 'taker_buy_sell_ratio_15m', funding: 'funding_bp' };
+  const source = [...(q.discovery || [])];
+  const volumes = source.map(item => Number(item.quote_volume_24h || 0)).sort((a, b) => a - b);
+  const medianVolume = volumes.length ? volumes[Math.floor(volumes.length / 2)] : 0;
+  const filtered = source.filter(item => {
+    if (filterMode === 'high_volume') return Number(item.quote_volume_24h || 0) >= medianVolume;
+    if (filterMode === 'oi_spike') return Math.abs(Number(item.open_interest_change_1h_pct || 0)) >= 1;
+    if (filterMode === 'big_movers') return Math.abs(Number(item.price_change_pct_24h || 0)) >= 5;
+    if (filterMode === 'high_funding') return Math.abs(Number(item.funding_bp || 0)) >= 3;
+    return true;
+  });
+  const discovery = filtered.sort((a, b) => {
+    if (sortMode === 'pair') return String(a.symbol).localeCompare(String(b.symbol));
+    if (sortMode === 'book') return Number(Boolean(b.scored_book)) - Number(Boolean(a.scored_book)) || String(a.symbol).localeCompare(String(b.symbol));
+    const field = sortFields[sortMode] || 'quote_volume_24h';
+    return Number(b[field] || 0) - Number(a[field] || 0);
+  });
+  $('quantrexDiscovery').innerHTML = discovery.length ? discovery.map((item, index) => `<tr>
+    <td>${index + 1}</td><td class="symbol">${esc(item.symbol)}</td><td class="${pnlClass(Number(item.price_change_pct_24h || 0))}">${num(item.price_change_pct_24h, 2)}%</td><td>${money(item.quote_volume_24h)}</td>
+    <td>${num(item.spread_bp, 2)}bp</td><td>${money(item.open_interest_usd)}</td>
+    <td class="${pnlClass(Number(item.open_interest_change_15m_pct || 0))}">${num(item.open_interest_change_15m_pct, 2)}%</td>
+    <td class="${pnlClass(Number(item.open_interest_change_1h_pct || 0))}">${num(item.open_interest_change_1h_pct, 2)}%</td>
+    <td>${num(item.taker_buy_sell_ratio_15m, 2)}×</td><td>${num(item.funding_bp, 2)}bp</td>
+    <td>${item.scored_book ? '<span class="state live">SCORED V0</span>' : '<span class="state watch">DISCOVERY</span>'}</td>
+  </tr>`).join('') : '<tr><td colspan="11" class="empty">No discovery snapshots available</td></tr>';
+}
+
+if ($('quantrexSort')) $('quantrexSort').addEventListener('change', () => latestQuantrex && renderQuantrex(latestQuantrex));
+if ($('quantrexFilter')) $('quantrexFilter').addEventListener('change', () => latestQuantrex && renderQuantrex(latestQuantrex));
+
 function render(s) {
   const paper = s.paper || {};
   const risk = paper.risk || {};
@@ -198,6 +369,7 @@ function render(s) {
   // Keep the desk decisive: one strongest actionable plan, never a menu of trades.
   const tickets = signals.filter(item => item.ticket).slice(0, 1);
   const strongest = tickets[0] || null;
+  renderQuantrex(s.quantrex);
   $('status').textContent = s.status || 'UNKNOWN';
   $('dot').className = 'dot ' + (s.status === 'LIVE' ? 'live' : '');
   $('equity').textContent = money(paper.equity_usd);

@@ -70,16 +70,23 @@ def health_snapshot(
             age_seconds = None
     fresh = age_seconds is not None and age_seconds <= stale_after_seconds
     live = state.get("status") == "LIVE"
-    healthy = live and fresh
+    errors = list(state.get("errors") or [])
+    error_free = not errors
+    healthy = live and fresh and error_free
     return (
         200 if healthy else 503,
         {
             "status": state.get("status"),
+            "paper_scanner_status": state.get("status"),
+            "runtime_mode": "PAPER_SCANNER_NO_SUBMIT",
+            "capital_live": False,
+            "no_submit": True,
             "healthy": healthy,
             "fresh": fresh,
+            "error_free": error_free,
             "last_scan": last_scan,
             "scan_age_seconds": round(age_seconds, 3) if age_seconds is not None else None,
             "stale_after_seconds": stale_after_seconds,
-            "errors": state.get("errors", []),
+            "errors": errors,
         },
     )

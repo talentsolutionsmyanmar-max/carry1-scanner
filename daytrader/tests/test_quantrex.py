@@ -512,6 +512,24 @@ class QuantrexRuntimeTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertTrue(payload["healthy"])
         self.assertEqual(payload["scan_age_seconds"], 30.0)
+        self.assertEqual(payload["runtime_mode"], "PAPER_SCANNER_NO_SUBMIT")
+        self.assertFalse(payload["capital_live"])
+        self.assertTrue(payload["no_submit"])
+
+    def test_health_fails_closed_when_runtime_has_errors(self):
+        code, payload = health_snapshot(
+            {
+                "status": "LIVE",
+                "last_scan": "2026-01-01T11:59:30+00:00",
+                "errors": ["BTCUSDT: TimeoutError"],
+            },
+            now=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            stale_after_seconds=120,
+        )
+        self.assertEqual(code, 503)
+        self.assertFalse(payload["healthy"])
+        self.assertFalse(payload["error_free"])
+        self.assertFalse(payload["capital_live"])
 
 
 if __name__ == "__main__":

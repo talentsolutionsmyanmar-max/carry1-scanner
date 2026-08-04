@@ -218,7 +218,9 @@ position is already open. Simultaneous accepted candidates fail closed rather
 than relying on an unfrozen priority rule. The runner contains no exchange
 client and reports `FORWARD_PAPER_NO_SUBMIT`.
 Start the server with `--quantrex-kill-switch` to persistently block every new
-Quantrex paper intent; the dashboard exposes the resulting `KILL ACTIVE`
-state. Clearing it is intentionally not exposed through the unauthenticated
-HTTP dashboard and must be an explicit local operator action through the
-runner before a restart.
+Quantrex paper intent; the dashboard exposes the resulting `KILL ACTIVE` state.
+Clearing it is intentionally not exposed through the unauthenticated HTTP
+dashboard and must be an explicit local operator action through the runner
+before a restart. For safe always-on scheduling, single-writer locking, durable
+state, and health monitoring, see
+[`ops/QUANTREX_PAPER_SCHEDULING.md`](ops/QUANTREX_PAPER_SCHEDULING.md).

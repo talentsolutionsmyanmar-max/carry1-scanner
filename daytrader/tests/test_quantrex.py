@@ -12,6 +12,7 @@ from daytrader.quantrex.replay import ReplayLedger
 from daytrader.quantrex.research import anchored_purged_windows, promotion_verdict, summarize_trade_rows
 from daytrader.quantrex.forward import ForwardPaperRunner
 from daytrader.quantrex.risk import RiskKernel, RiskState
+from daytrader.quantrex.runtime import RunnerAlreadyActive, SingleInstanceLock, health_snapshot
 from daytrader.quantrex.shadow import NoSubmitVenue, SubmissionDisabled
 from daytrader.quantrex.service import evaluate_public_snapshot
 from daytrader.quantrex.strategies import breakout_signal, qsr_signal, qsr_v0_signal
@@ -465,6 +466,52 @@ class QuantrexForwardPaperTests(unittest.TestCase):
         self.assertEqual(second["signals"], first["signals"])
         self.assertEqual(restored["ledger_hash"], first["ledger_hash"])
         self.assertTrue(restored["no_submit"])
+
+
+class QuantrexRuntimeTests(unittest.TestCase):
+    def test_single_instance_lock_rejects_a_second_writer(self):
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "runner.lock"
+            with SingleInstanceLock(path):
+                with self.assertRaises(RunnerAlreadyActive):
+                    SingleInstanceLock(path).acquire()
+            with SingleInstanceLock(path):
+                self.assertTrue(path.exists())
+
+    def test_health_fails_closed_when_scan_is_missing_or_stale(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        missing_code, missing = health_snapshot(
+            {"status": "LIVE", "last_scan": None, "errors": []},
+            now=now,
+            stale_after_seconds=120,
+        )
+        stale_code, stale = health_snapshot(
+            {
+                "status": "LIVE",
+                "last_scan": "2026-01-01T11:57:59+00:00",
+                "errors": [],
+            },
+            now=now,
+            stale_after_seconds=120,
+        )
+        self.assertEqual(missing_code, 503)
+        self.assertFalse(missing["fresh"])
+        self.assertEqual(stale_code, 503)
+        self.assertFalse(stale["fresh"])
+
+    def test_health_reports_fresh_live_scan(self):
+        code, payload = health_snapshot(
+            {
+                "status": "LIVE",
+                "last_scan": "2026-01-01T11:59:30+00:00",
+                "errors": [],
+            },
+            now=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            stale_after_seconds=120,
+        )
+        self.assertEqual(code, 200)
+        self.assertTrue(payload["healthy"])
+        self.assertEqual(payload["scan_age_seconds"], 30.0)
 
 
 if __name__ == "__main__":

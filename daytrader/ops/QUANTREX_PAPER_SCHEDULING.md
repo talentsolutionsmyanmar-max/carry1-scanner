@@ -25,12 +25,19 @@ DAY_SCAN_SECONDS=60 python3 /absolute/repo/daytrader/server.py \
 The supervisor should start this command at boot and restart it only after a
 non-zero exit. The runtime must use UTC. Keep the durable state directory
 outside the repository checkout and back it up without modifying snapshots.
+Keep the state and lock on a local filesystem. Do not use NFS, SMB, or another
+network filesystem unless its advisory-lock and atomic-replace semantics have
+been independently proven for this exact deployment.
 
 Monitor `GET http://127.0.0.1:7200/api/health`. It returns HTTP 503 when the
 scanner is not `LIVE`, has never completed a scan, or its last scan is stale.
 The response includes `scan_age_seconds` and `stale_after_seconds`. Alert on a
 503 response, a held-lock startup failure, a ledger load/reconciliation error,
-or a missing process.
+or a missing process. Any non-empty runtime `errors` list also makes health fail
+closed with HTTP 503. The `status: "LIVE"` compatibility field means only that
+the paper scanner process is running; `runtime_mode: "PAPER_SCANNER_NO_SUBMIT"`,
+`capital_live: false`, and `no_submit: true` are the explicit capital-safety
+fields.
 
 No language model is in the scheduling, signal, risk, or ledger path. A low-cost
 model may summarize health alerts, but it must never control timing, restart a

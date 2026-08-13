@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from daytrader.config import Config
-from daytrader.paper import PaperBroker
+from daytrader.paper import PaperBroker, PaperStateIntegrityError
 
 
 class PaperBrokerTests(unittest.TestCase):
@@ -60,6 +60,17 @@ class PaperBrokerTests(unittest.TestCase):
             )
             self.assertFalse(opened)
             self.assertIn("daily trade limit", reason)
+
+    def test_existing_corrupt_ledger_fails_closed_without_replacing_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            corrupted = "{not valid json"
+            state_path.write_text(corrupted)
+
+            with self.assertRaisesRegex(PaperStateIntegrityError, "invalid JSON"):
+                PaperBroker(state_path, Config())
+
+            self.assertEqual(state_path.read_text(), corrupted)
 
 
 if __name__ == "__main__":

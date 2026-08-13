@@ -10,6 +10,10 @@ from pathlib import Path
 from .config import Config
 
 
+class PaperStateIntegrityError(RuntimeError):
+    """Persisted paper evidence exists but cannot be safely replayed."""
+
+
 class PaperBroker:
     def __init__(self, path: Path, config: Config):
         self.path = path
@@ -36,14 +40,24 @@ class PaperBroker:
         }
 
     def _load(self) -> dict:
+        if not self.path.exists():
+            return self._new_state()
         try:
             state = json.loads(self.path.read_text())
-            if state.get("version") == 1 and state.get("mode") == "PAPER_ONLY":
-                state.setdefault("day_start_equity_usd", state.get("cash_usd", 0.0))
-                return state
-        except (OSError, ValueError, TypeError):
-            pass
-        return self._new_state()
+        except (OSError, ValueError, TypeError) as exc:
+            raise PaperStateIntegrityError(
+                f"paper state exists but contains invalid JSON: {self.path}"
+            ) from exc
+        if not isinstance(state, dict):
+            raise PaperStateIntegrityError(
+                f"paper state exists but is not an object: {self.path}"
+            )
+        if state.get("version") != 1 or state.get("mode") != "PAPER_ONLY":
+            raise PaperStateIntegrityError(
+                f"paper state has unsupported version or mode: {self.path}"
+            )
+        state.setdefault("day_start_equity_usd", state.get("cash_usd", 0.0))
+        return state
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

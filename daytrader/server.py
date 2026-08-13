@@ -21,31 +21,20 @@ if __package__ in {None, ""}:
     from daytrader.engine import evaluate_snapshot
     from daytrader.market import BinanceFuturesClient
     from daytrader.paper import PaperBroker
-    from daytrader.quantrex.config import QuantrexConfig
-    from daytrader.quantrex.forward import ForwardPaperRunner
     from daytrader.quantrex.runtime import SingleInstanceLock, health_snapshot
-    from daytrader.quantrex.service import evaluate_public_snapshot
 else:
     from .config import Config
     from .engine import evaluate_snapshot
     from .market import BinanceFuturesClient
     from .paper import PaperBroker
-    from .quantrex.config import QuantrexConfig
-    from .quantrex.forward import ForwardPaperRunner
     from .quantrex.runtime import SingleInstanceLock, health_snapshot
-    from .quantrex.service import evaluate_public_snapshot
 
 
 class Scanner:
-    def __init__(self, config: Config, state_file: Path, quantrex_state_file: Path | None = None):
+    def __init__(self, config: Config, state_file: Path):
         self.config = config
         self.client = BinanceFuturesClient(config)
         self.broker = PaperBroker(state_file, config)
-        self.quantrex_config = QuantrexConfig()
-        self.quantrex_runner = ForwardPaperRunner(
-            self.quantrex_config,
-            quantrex_state_file or state_file.with_name(".quantrex_paper_state.json"),
-        )
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
         self.universe: list[str] = []
@@ -62,14 +51,6 @@ class Scanner:
             "errors": [],
             "paper": self.broker.snapshot(),
             "config": self.config.public_dict(),
-            "quantrex": {
-                "mode": "PAPER_PRIMARY_SHADOW_NO_SUBMIT",
-                "status": "STARTING",
-                "universe": list(self.quantrex_config.universe),
-                "books": [],
-                "no_submit": True,
-                "forward_paper": self.quantrex_runner.snapshot(),
-            },
             "method": (
                 "one arbiter over two closed-candle playbooks: momentum breakout, "
                 "or liquidity sweep -> MSS -> displacement -> unfilled FVG retest; "
@@ -95,8 +76,6 @@ class Scanner:
         errors = []
         signals = []
         prices = {}
-        quantrex_books = []
-        quantrex_discovery = []
         snapshots = []
         try:
             self._refresh_universe()
@@ -114,36 +93,6 @@ class Scanner:
                     try:
                         market = future.result()
                         snapshots.append(market)
-                        spread_bp = (
-                            (market.ask - market.bid) / ((market.ask + market.bid) / 2)
-                            * 10_000
-                            if market.ask > market.bid > 0
-                            else None
-                        )
-                        quantrex_discovery.append(
-                            {
-                                "rank_source": "BINANCE_USDM_24H_QUOTE_VOLUME",
-                                "symbol": market.symbol,
-                                "quote_volume_24h": market.quote_volume_24h,
-                                "price_change_pct_24h": market.price_change_pct_24h,
-                                "spread_bp": round(spread_bp, 4) if spread_bp is not None else None,
-                                "open_interest_usd": market.open_interest_usd,
-                                "open_interest_change_15m_pct": market.open_interest_change_15m_pct,
-                                "open_interest_change_1h_pct": market.open_interest_change_1h_pct,
-                                "taker_buy_sell_ratio_15m": market.taker_buy_sell_ratio_15m,
-                                "funding_bp": market.funding_bp,
-                                "scored_book": market.symbol in self.quantrex_config.universe,
-                            }
-                        )
-                        if market.symbol in self.quantrex_config.universe:
-                            quantrex_books.append(
-                                evaluate_public_snapshot(
-                                    market,
-                                    self.quantrex_config,
-                                    observed_at=datetime.now(timezone.utc),
-                                    equity_usd=self.quantrex_runner.broker.risk.state.equity_usd,
-                                )
-                            )
                     except Exception as exc:
                         errors.append(f"{symbol}: {type(exc).__name__}: {exc}")
 
@@ -162,12 +111,6 @@ class Scanner:
                     )
 
         events = self.broker.update_prices(prices, started)
-        snapshots_by_symbol = {snapshot.symbol: snapshot for snapshot in snapshots}
-        quantrex_forward = (
-            self.quantrex_runner.consume(quantrex_books, snapshots_by_symbol)
-            if self.config.auto_paper
-            else self.quantrex_runner.snapshot()
-        )
         signals.sort(
             key=lambda item: (
                 {"LIVE": 0, "ARMED": 1, "WATCH": 2}.get(item["state"], 3),
@@ -223,19 +166,6 @@ class Scanner:
                     "events": events,
                     "errors": errors[-20:],
                     "paper": self.broker.snapshot(finished),
-                    "quantrex": {
-                        **self.state["quantrex"],
-                        "status": "PUBLIC_MARKET_SHADOW",
-                        "books": sorted(
-                            quantrex_books, key=lambda item: item.get("symbol", "")
-                        ),
-                        "forward_paper": quantrex_forward,
-                        "discovery": sorted(
-                            quantrex_discovery,
-                            key=lambda item: item.get("quote_volume_24h") or 0,
-                            reverse=True,
-                        )[:12],
-                    },
                 }
             )
             return self.snapshot()
@@ -325,31 +255,17 @@ def main() -> None:
         default=ROOT / ".paper_state.json",
     )
     parser.add_argument(
-        "--quantrex-state-file",
-        type=Path,
-        default=ROOT / ".quantrex_paper_state.json",
-    )
-    parser.add_argument(
         "--lock-file",
         type=Path,
-        help="single-writer lock path (defaults beside Quantrex state)",
-    )
-    parser.add_argument(
-        "--quantrex-kill-switch",
-        action="store_true",
-        help="persistently block all new Quantrex paper intents",
+        help="single-writer lock path (defaults beside paper state)",
     )
     args = parser.parse_args()
-    lock_file = args.lock_file or args.quantrex_state_file.with_suffix(
-        args.quantrex_state_file.suffix + ".lock"
-    )
+    lock_file = args.lock_file or args.state_file.with_suffix(args.state_file.suffix + ".lock")
     config = Config.from_env()
     if args.no_auto_paper:
         config = Config(**{**config.__dict__, "auto_paper": False})
     with SingleInstanceLock(lock_file):
-        scanner = Scanner(config, args.state_file, args.quantrex_state_file)
-        if args.quantrex_kill_switch:
-            scanner.quantrex_runner.set_kill_switch(True)
+        scanner = Scanner(config, args.state_file)
         if args.once:
             print(json.dumps(scanner.scan_once(), indent=2))
             return
